@@ -2,6 +2,14 @@
 
 Use **Vercel Hobby** for the React site and Node API functions, and **Supabase Free** for email/password accounts and the database. The code is ready for these services; no project, billing plan, or paid service is created automatically.
 
+## Current personal deployment — October 2, 2026
+
+[Portion is live](https://portion-ashy.vercel.app/) on Vercel Hobby, connected to `HyperOrb/portion` with `master` as its production branch. The Supabase Free project has the journal migration applied. Production variables, private server keys, and exact production/localhost authentication redirects are configured. Email confirmation remains enabled. Choose your own password through the site's **Create an account** form, using your Supabase organization email for the default mailer's delivery restrictions.
+
+Supabase's GitHub connection is present, but automatic database deployment and paid preview branching remain off. The initial migration was applied through the SQL Editor; it has not been registered in CLI migration history. Before enabling automatic migrations, record it as already applied with `supabase migration repair 202610020001 --status applied` after linking the CLI to this project; see the [official migration repair instructions](https://supabase.com/docs/reference/cli/supabase-migration-repair). Do not rerun that initial SQL on the existing database. Website commits to `master` deploy through Vercel.
+
+The original localhost journal is preserved. To move data to the hosted address, sign in and restore the backup you exported from the browser that contains your meals. Your account password and email confirmation are the remaining personal setup steps. Signed-in saves and real provider calls still need a live account check; the deployed sign-in screen, configuration, anonymous-access restrictions, and browser bundle were verified.
+
 ## 1. Preserve your existing journal
 
 On the current localhost app, go to **Settings → Export backup**. Keep that JSON file. Browser storage is specific to an address: your Vercel site cannot read the journal at localhost. After signing in locally you can use **Review device import**; on the new hosted address you can use **Restore backup**. Restoring replaces that account’s journal after confirmation.
@@ -99,4 +107,4 @@ Current official free-plan terms, checked October 2, 2026:
 - [Vercel Vite hosting](https://vercel.com/docs/frameworks/frontend/vite), [Node functions](https://vercel.com/docs/functions/runtimes/node-js), and [Node versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions) document this deployment layout.
 - [Google pricing](https://ai.google.dev/gemini-api/docs/pricing) lists a Standard free tier for the configured Gemini 2.5 Flash-Lite. [Google terms](https://ai.google.dev/gemini-api/terms) explain unpaid-service data use and regional restrictions.
 
-No live Supabase project or Vercel deployment can be verified until these account setup steps are complete.
+For a new installation, complete the account setup steps above before checking its live deployment. This personal deployment's completed checks are recorded in [verification](verification.md).

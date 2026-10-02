@@ -4,6 +4,8 @@ A personal, mobile-friendly calorie and macro journal. Describe one meal, confir
 
 For accounts and free hosting, follow **[Supabase + Vercel setup](docs/hosting.md)**. Your existing device journal is preserved; export it before moving to the hosted address.
 
+The personal deployment is live at **[portion-ashy.vercel.app](https://portion-ashy.vercel.app/)**. Create your own account using your Supabase organization email, confirm the email link, then sign in. Restore your existing journal backup under Settings if needed.
+
 ## Run locally
 
 Requires Node.js **22.12+** (Node 24 LTS recommended) and npm.
