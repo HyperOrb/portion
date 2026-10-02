@@ -349,18 +349,18 @@ test('automatically falls back to fallback model when primary model hits rate li
   responseMeal.items[0].nutrition = { basis: 'g', per100: { calories: 165, protein: 31, carbs: 0, fat: 3.6 } };
   const result = await parseMeal('200 g chicken', {
     apiKey: 'secret',
-    model: 'gemini-3.5-flash',
+    model: 'gemini-3.5-flash-lite',
     fallbackModel: 'gemini-3.1-flash-lite',
     fetchImpl: async (url) => {
       calls.push(url);
-      if (url.includes('gemini-3.5-flash')) {
+      if (url.includes('gemini-3.5-flash-lite')) {
         return new Response('quota reached', { status: 429, headers: { 'retry-after': '60' } });
       }
       return new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(responseMeal) }] } }] }));
     },
   });
   assert.equal(calls.length, 2);
-  assert.ok(calls[0].includes('gemini-3.5-flash'));
+  assert.ok(calls[0].includes('gemini-3.5-flash-lite'));
   assert.ok(calls[1].includes('gemini-3.1-flash-lite'));
   assert.equal(result.title, responseMeal.title);
   assert.equal(result.items[0].food.source.id, 'gemini-3.1-flash-lite');
