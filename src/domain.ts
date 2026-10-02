@@ -11,10 +11,9 @@ export type FoodSource = {
 export type NutritionFood = {
   id: string;
   name: string;
-  per100g: Nutrients;
   source: FoodSource;
   cookingState?: string;
-};
+} & ({ per100g: Nutrients; per100ml?: never } | { per100ml: Nutrients; per100g?: never });
 
 export type Ingredient = {
   id: string;
@@ -22,6 +21,7 @@ export type Ingredient = {
   amount: number;
   unit: string;
   grams: number | null;
+  milliliters?: number | null;
   cookingState: 'raw' | 'cooked' | 'as_sold' | 'unknown';
   preparation: string;
   brand?: string | null;
@@ -77,12 +77,18 @@ export function localDate(date = new Date()): string {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 
-/** Totals use the selected underlying database/label values, never parser guesses. */
+export function nutritionUnit(food: NutritionFood): 'g' | 'ml' { return food.per100ml ? 'ml' : 'g'; }
+export function nutritionValues(food: NutritionFood): Nutrients { return food.per100ml ?? food.per100g!; }
+export function ingredientQuantity(item: Ingredient): number | null {
+  return item.food?.per100ml ? item.milliliters ?? null : item.grams;
+}
+
+/** Scale stored database, label, or explicitly identified AI values in their native basis. */
 export function mealTotals(items: Ingredient[]): Nutrients {
   const totals: Nutrients = { calories: 0, protein: 0, carbs: 0, fat: 0 };
   for (const item of items) {
-    if (!item.food || item.grams === null || unresolvedIngredient(item)) continue;
-    for (const key of nutrientKeys) totals[key] += item.food.per100g[key] * item.grams / 100;
+    if (!item.food || unresolvedIngredient(item)) continue;
+    for (const key of nutrientKeys) totals[key] += nutritionValues(item.food)[key] * ingredientQuantity(item)! / 100;
   }
   return totals;
 }
@@ -96,7 +102,8 @@ function unresolvedIngredient(item: Ingredient): boolean {
   const weightMismatch = sourceState === 'as_sold' && item.cookingState !== 'as_sold'
     || sourceState === 'raw' && item.cookingState === 'cooked'
     || sourceState === 'cooked' && item.cookingState === 'raw';
-  return !item.food || item.grams === null || !Number.isFinite(item.grams) || item.grams <= 0
+  const quantity = ingredientQuantity(item);
+  return !item.food || quantity === null || !Number.isFinite(quantity) || quantity <= 0
     || Boolean(item.clarification?.trim()) || weightMismatch;
 }
 
@@ -152,25 +159,28 @@ function nutrients(value: unknown, path: string): Nutrients {
 }
 
 function food(value: unknown, path: string): NutritionFood {
-  const data = object(value, path, ['id', 'name', 'per100g', 'source', 'cookingState']);
+  const data = object(value, path, ['id', 'name', 'per100g', 'per100ml', 'source', 'cookingState']);
   const source = object(data.source, `${path}.source`, ['name', 'id', 'url', 'description', 'dataType']);
   const name = string(source.name, `${path}.source.name`);
   const url = string(source.url, `${path}.source.url`, true);
   if (name === 'Package label' && (url !== '' || source.dataType !== 'label')) invalid(`${path}.source`, 'must identify package-label data');
   if (source.dataType === 'label' && name !== 'Package label') invalid(`${path}.source`, 'must identify package-label data');
+  if ((source.dataType === 'ai_estimate' || name === 'Gemini AI estimate') && (name !== 'Gemini AI estimate' || source.dataType !== 'ai_estimate' || url !== '')) invalid(`${path}.source`, 'must identify an unverified AI estimate');
   if (url) {
     try {
       if (!['https:', 'http:'].includes(new URL(url).protocol)) invalid(`${path}.source.url`, 'must be an HTTP or HTTPS link');
     } catch {
       invalid(`${path}.source.url`, 'must be an HTTP or HTTPS link');
     }
-  } else if (name !== 'Package label') {
+  } else if (name !== 'Package label' && name !== 'Gemini AI estimate') {
     invalid(`${path}.source.url`, 'must identify the nutrition source');
   }
+  if (Object.hasOwn(data, 'per100g') === Object.hasOwn(data, 'per100ml')) invalid(path, 'must use exactly one nutrition basis');
+  const basis = Object.hasOwn(data, 'per100ml') ? { per100ml: nutrients(data.per100ml, `${path}.per100ml`) } : { per100g: nutrients(data.per100g, `${path}.per100g`) };
   const result: NutritionFood = {
     id: string(data.id, `${path}.id`, false, 500),
     name: string(data.name, `${path}.name`),
-    per100g: nutrients(data.per100g, `${path}.per100g`),
+    ...basis,
     source: { name, id: string(source.id, `${path}.source.id`, false, 500), url, description: string(source.description, `${path}.source.description`, true) },
   };
   if (source.dataType !== undefined) result.source.dataType = string(source.dataType, `${path}.source.dataType`);
@@ -182,7 +192,7 @@ function food(value: unknown, path: string): NutritionFood {
 }
 
 function ingredient(value: unknown, path: string): Ingredient {
-  const data = object(value, path, ['id', 'name', 'amount', 'unit', 'grams', 'cookingState', 'preparation', 'brand', 'query', 'assumptions', 'clarification', 'food']);
+  const data = object(value, path, ['id', 'name', 'amount', 'unit', 'grams', 'milliliters', 'cookingState', 'preparation', 'brand', 'query', 'assumptions', 'clarification', 'food']);
   if (!['raw', 'cooked', 'as_sold', 'unknown'].includes(data.cookingState as string)) invalid(`${path}.cookingState`, 'is unsupported');
   const result: Ingredient = {
     id: string(data.id, `${path}.id`, false, 500),
@@ -195,6 +205,8 @@ function ingredient(value: unknown, path: string): Ingredient {
     assumptions: texts(data.assumptions, `${path}.assumptions`),
     food: data.food === null ? null : food(data.food, `${path}.food`),
   };
+  if (data.milliliters !== undefined) result.milliliters = data.milliliters === null ? null : number(data.milliliters, `${path}.milliliters`, true);
+  if (result.grams !== null && result.milliliters != null) invalid(path, 'must not mix gram and mL portions');
   if (data.brand !== undefined) result.brand = data.brand === null ? null : string(data.brand, `${path}.brand`, true);
   if (data.query !== undefined) result.query = string(data.query, `${path}.query`, true);
   if (data.clarification !== undefined) result.clarification = data.clarification === null ? null : string(data.clarification, `${path}.clarification`, true);

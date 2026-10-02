@@ -8,7 +8,39 @@ import { createAppServer, createRequestHandler } from '../server/index.js';
 import { createServer, request as httpRequest } from 'node:http';
 import { GEMINI_MODEL, mealSchema, parseMeal, validateMeal } from '../server/gemini.js';
 
-const validMeal = () => ({ title: 'Chicken and rice', items: [{ name: 'chicken breast', amount: 200, unit: 'g', grams: 200, cookingState: 'unknown', preparation: 'pan fried', brand: null, query: 'chicken breast', assumptions: [], clarification: null }], checks: ['Check cooking oil.'] });
+const validMeal = () => ({ title: 'Chicken and rice', items: [{ name: 'chicken breast', amount: 200, unit: 'g', grams: 200, milliliters: null, nutrition: null, cookingState: 'unknown', preparation: 'pan fried', brand: null, query: 'chicken breast', assumptions: [], clarification: null }], checks: ['Check cooking oil.'] });
+
+test('one glass of latte receives an editable volume and an honest AI estimate without a gram question', () => {
+  const response = { title: 'Caffe latte', checks: ['Check sugar or syrup.'], items: [{
+    name: 'caffe latte', amount: 1, unit: 'serving', grams: null, milliliters: 240,
+    cookingState: 'as_sold', preparation: 'whole milk, no syrup', brand: null, query: 'caffe latte',
+    assumptions: ['1 gelas diasumsikan 240 mL, susu full cream, tanpa gula tambahan.'], clarification: null,
+    nutrition: { basis: 'ml', per100: { calories: 55, protein: 3, carbs: 4.5, fat: 3 } },
+  }] };
+  const result = validateMeal(response, 'Aku minum caffe latte 1 gelas', 'gemini-test');
+  assert.equal(result.items[0].milliliters, 240);
+  assert.equal(result.items[0].grams, null);
+  assert.equal(result.items[0].clarification, null);
+  assert.deepEqual(result.items[0].food.per100ml, response.items[0].nutrition.per100);
+  assert.equal(result.items[0].food.source.dataType, 'ai_estimate');
+  assert.equal(result.items[0].food.source.id, 'gemini-test');
+  assert.equal(result.items[0].food.source.url, '');
+  for (const invalid of [
+    { ...response.items[0], grams: 240 },
+    { ...response.items[0], milliliters: -1 },
+    { ...response.items[0], nutrition: { basis: 'g', per100: response.items[0].nutrition.per100 } },
+    { ...response.items[0], nutrition: { basis: 'ml', per100: { calories: 55, protein: -1, carbs: 4.5, fat: 3 } } },
+    { ...response.items[0], nutrition: { basis: 'ml', per100: { calories: 55, protein: 3, fat: 3 } } },
+    { ...response.items[0], nutrition: { basis: 'ml', per100: { ...response.items[0].nutrition.per100, calories: Infinity } } },
+    { ...response.items[0], nutrition: { ...response.items[0].nutrition, source: 'USDA' } },
+  ]) assert.throws(() => validateMeal({ ...response, items: [invalid] }), { code: 'INVALID_AI_RESPONSE' });
+  const unidentifiable = validateMeal({ ...response, items: [{ ...response.items[0], nutrition: null }] });
+  assert.equal(unidentifiable.items[0].food, null);
+  const explicitVolume = validateMeal({ ...response, items: [{ ...response.items[0], unit: 'ml', amount: 350 }] });
+  assert.equal(explicitVolume.items[0].milliliters, 350);
+  const unwantedPortionQuestion = validateMeal({ ...response, items: [{ ...response.items[0], clarification: 'Berapa gram?' }] });
+  assert.equal(unwantedPortionQuestion.items[0].clarification, null);
+});
 
 test('hosted APIs fail closed without cloud configuration or a verified signed-in user', async t => {
   let calls = 0;
@@ -166,12 +198,12 @@ test('built client is served while files outside dist stay inaccessible', async 
   assert.equal((await request('/%2e%2e%2fpackage.json')).status, 404);
 });
 
-test('Gemini response validation strips guessed household weights and asks for weighing state', () => {
+test('Gemini response validation accepts household estimates and still asks material weighing questions', () => {
   const meal = validateMeal(validMeal());
   assert.match(meal.items[0].clarification, /raw\/dry or cooked/);
   const household = validMeal();
   Object.assign(household.items[0], { unit: 'tsp', amount: 1, grams: 5 });
-  assert.equal(validateMeal(household).items[0].grams, null);
+  assert.equal(validateMeal(household).items[0].grams, 5);
   assert.match(validateMeal(household).items[0].clarification, /raw\/dry or cooked/);
   const withNutrition = validMeal();
   withNutrition.items[0].calories = 330;
@@ -201,22 +233,22 @@ test('weighing-state fallbacks follow Indonesian or English without changing pre
   assert.equal(validateMeal(meal, 'Dada ayam ditimbang matang 200 g').items[0].clarification, null);
 });
 
-test('household portions stay unresolved without a guessed weight or extra clarification state', () => {
+test('household portions use visible gram assumptions without a portion clarification', () => {
   const meal = validMeal();
   Object.assign(meal.items[0], { name: 'tempe', query: 'tempeh', amount: 1, unit: 'piece', grams: 80, cookingState: 'cooked', preparation: 'goreng', assumptions: ['Tempe ukuran sedang; berapa gram yang dimakan?'] });
   const result = validateMeal(meal, 'Tempe goreng 1 potong ukuran sedang');
-  assert.equal(result.items[0].grams, null);
+  assert.equal(result.items[0].grams, 80);
   assert.equal(result.items[0].clarification, null);
   assert.deepEqual(result.items[0].assumptions, meal.items[0].assumptions);
   assert.equal(result.items.length, 1);
-  for (const [target, field] of [[result, 'reply'], [result, 'calories'], [result.items[0], 'protein']]) {
+  for (const [target, field] of [[meal, 'reply'], [meal, 'calories'], [meal.items[0], 'protein']]) {
     target[field] = 1;
-    assert.throws(() => validateMeal(result), { code: 'INVALID_AI_RESPONSE' });
+    assert.throws(() => validateMeal(meal), { code: 'INVALID_AI_RESPONSE' });
     delete target[field];
   }
 });
 
-test('Gemini REST transport pins the model, persona, strict extraction schema, and LOW thinking', async () => {
+test('Gemini REST transport pins the model, honest estimation schema, and LOW thinking', async () => {
   const result = await parseMeal('200 g chicken', { apiKey: 'server-only-secret', model: 'gemini-3.8-flash', fetchImpl: async (url, options) => {
     assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');
     assert.equal(options.headers['x-goog-api-key'], 'server-only-secret');
@@ -233,18 +265,19 @@ test('Gemini REST transport pins the model, persona, strict extraction schema, a
     const instruction = body.systemInstruction.parts[0].text;
     assert.match(instruction, /NutriTrack ID/);
     assert.match(instruction, /warteg or anak-kost.*tempe, tahu, sambal, dada ayam, nasi liwet, and mie ayam/);
-    assert.match(instruction, /user's primary language.*casual Indonesian.*English for English/s);
+    assert.match(instruction, /user's primary language.*casual Indonesian.*English/s);
     assert.match(instruction, /English USDA database search query/);
-    assert.match(instruction, /Preserve the composite dish's name in query alongside an English food description/);
-    assert.match(instruction, /never split them into a guessed recipe/);
-    assert.match(instruction, /centong, mangkuk, or ukuran sedang.*actual gram weight.*assumption/);
-    assert.match(instruction, /never guess density/i);
+    assert.match(instruction, /Keep named composite dishes as single items/);
+    assert.match(instruction, /typical size.*assumed total grams or mL/s);
+    assert.match(instruction, /Never assume 1 mL equals 1 g/);
+    assert.match(instruction, /Do not ask the user for grams just because they gave a household measure/);
     assert.match(instruction, /bakar\/grilled, goreng\/fried, kukus\/steamed, and rebus\/boiled/);
     assert.match(instruction, /minyak\/oil, mentega\/butter, santan\/coconut milk, tepung\/flour/);
-    assert.match(instruction, /Never claim an unmentioned addition was used or invent its amount/);
+    assert.match(instruction, /Never claim that an assumed ingredient was definitely consumed/);
     assert.match(instruction, /basreng stays basreng, and kacang pilus uses pilus/);
     assert.match(instruction, /never replace it with plain peanuts/);
-    assert.match(instruction, /Do not calculate, estimate, or return any calories, nutrients, macros/);
+    assert.match(instruction, /explicitly AI estimates, NOT retrieved or verified data/);
+    assert.match(instruction, /Never invent a database ID, citation, web search, exact package label/);
     assert.equal(body.tools, undefined);
     return new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'internal reasoning is not JSON' }, { text: JSON.stringify(validMeal()) }] } }] }));
   } });

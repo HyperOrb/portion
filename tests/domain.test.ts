@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { freshData, hasUnresolved, loadData, localDate, mealTotals, proteinFeedback, saveData, STORAGE_KEY, validateBackup, type Ingredient } from '../src/domain.ts';
+import { freshData, hasUnresolved, loadData, localDate, mealTotals, nutritionUnit, ingredientQuantity, proteinFeedback, saveData, STORAGE_KEY, validateBackup, type Ingredient } from '../src/domain.ts';
 
 const item: Ingredient = {
   id: 'chicken', name: 'Chicken breast', amount: 200, unit: 'g', grams: 200,
@@ -19,6 +19,37 @@ function backup() {
     targets: { calories: 2200, protein: 150 },
   };
 }
+
+test('AI drink volumes scale in mL and survive journal, usual-meal, and backup storage with provenance', () => {
+  const latte: Ingredient = {
+    id: 'latte', name: 'Caffe latte', amount: 1, unit: 'serving', grams: null, milliliters: 240,
+    cookingState: 'as_sold', preparation: 'Whole milk, no syrup', clarification: null,
+    assumptions: ['1 gelas diasumsikan 240 mL; tanpa gula tambahan.'],
+    food: { id: 'ai-latte', name: 'Caffe latte', cookingState: 'as_sold', per100ml: { calories: 55, protein: 3, carbs: 4.5, fat: 3 },
+      source: { name: 'Gemini AI estimate', id: 'gemini-test', url: '', dataType: 'ai_estimate', description: 'Unverified model estimate; whole milk and no added sugar assumed.' } },
+  };
+  assert.equal(hasUnresolved([latte]), false);
+  assert.equal(nutritionUnit(latte.food!), 'ml');
+  assert.equal(ingredientQuantity(latte), 240);
+  assert.equal(mealTotals([latte]).calories, 132);
+  assert.equal(mealTotals([{ ...latte, amount: 360, unit: 'ml', milliliters: 360 }]).calories, 198);
+  assert.equal(hasUnresolved([{ ...latte, milliliters: null, grams: 240 }]), true);
+  const record = { ...backup().meals[0], title: 'Latte', items: [latte] };
+  const { date: _date, ...usual } = record;
+  const original = { ...freshData(), meals: [record], usualMeals: [usual] };
+  const restored = validateBackup(JSON.parse(JSON.stringify(original)));
+  assert.equal(restored.meals[0].items[0].food!.source.dataType, 'ai_estimate');
+  assert.equal(restored.usualMeals[0].items[0].milliliters, 240);
+  assert.equal(mealTotals(restored.meals[0].items).calories, 132);
+  const volumeLabel = { ...latte.food!, source: { name: 'Package label', id: 'label-drink', url: '', dataType: 'label', description: 'Actual label per 100 mL' } };
+  assert.equal(validateBackup({ ...freshData(), labels: [volumeLabel] }).labels[0].per100ml!.calories, 55);
+  for (const source of [{ ...latte.food!.source, name: 'USDA FoodData Central' }, { ...latte.food!.source, dataType: 'verified' }, { ...latte.food!.source, url: 'https://fdc.nal.usda.gov/' }]) {
+    assert.throws(() => validateBackup({ ...original, meals: [{ ...record, items: [{ ...latte, food: { ...latte.food!, source } }] }] }), /AI estimate/);
+  }
+  assert.throws(() => validateBackup({ ...original, meals: [{ ...record, items: [{ ...latte, grams: 240 }] }] }), /mix gram and mL/);
+  assert.throws(() => validateBackup({ ...original, meals: [{ ...record, items: [{ ...latte, food: { ...latte.food!, per100g: item.food!.per100g } }] }] }), /one nutrition basis/);
+  assert.throws(() => validateBackup({ ...freshData(), labels: [latte.food!] }), /package-label/);
+});
 
 test('calculates from stored per-100g nutrition and changes portions without parser guesses', () => {
   assert.deepEqual(mealTotals([item]), { calories: 330, protein: 62, carbs: 0, fat: 7.2 });
@@ -72,8 +103,8 @@ test('round-trips verified meals, templates, labels, and optional targets withou
   });
   assert.equal(data.labels[0].source.dataType, 'label');
   assert.equal(data.usualMeals[0].items[0].grams, 200);
-  data.meals[0].items[0].food!.per100g.protein = 10;
-  assert.equal(original.meals[0].items[0].food!.per100g.protein, 31);
+  data.meals[0].items[0].food!.per100g!.protein = 10;
+  assert.equal(original.meals[0].items[0].food!.per100g!.protein, 31);
   assert.deepEqual(freshData(), { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 } });
 });
 
@@ -101,7 +132,7 @@ test('rejects invalid dates, amounts, unsourced values, unresolved items, and du
     data => { data.meals[0].date = '2026-02-30'; },
     data => { data.meals[0].createdAt = '2026-10-01T24:00:00Z'; },
     data => { data.meals[0].items[0].grams = -1; },
-    data => { data.meals[0].items[0].food!.per100g.calories = Number.POSITIVE_INFINITY; },
+    data => { data.meals[0].items[0].food!.per100g!.calories = Number.POSITIVE_INFINITY; },
     data => { data.meals[0].items[0].food!.source.url = 'javascript:alert(1)'; },
     data => { data.meals[0].items[0].food!.source.url = ''; },
     data => { data.meals[0].items[0].food!.source.dataType = 'label'; },
