@@ -1,0 +1,10 @@
+.git/
+.vercel/
+node_modules/
+dist/
+output/
+.playwright-cli/
+.env
+.env.*
+*.log
+.DS_Store
