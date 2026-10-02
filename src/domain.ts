@@ -54,18 +54,17 @@ type StorageReader = Pick<Storage, 'getItem'>;
 type StorageWriter = Pick<Storage, 'setItem'>;
 
 export const STORAGE_KEY = 'calorie-count-v1';
-export const RYANN_TARGETS: Readonly<Nutrients> = Object.freeze({ calories: 2600, protein: 180, carbs: 290, fat: 80 });
 const nutrientKeys = ['calories', 'protein', 'carbs', 'fat'] as const;
 
 export function freshData(): AppData {
-  return { version: 1, meals: [], usualMeals: [], labels: [], targets: { ...RYANN_TARGETS } };
+  return { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 } };
 }
 
 /** Friendly feedback uses sourced totals on this device, without another AI request. */
 export function proteinFeedback(consumed: number, target: number | undefined, mealProtein?: number): string {
   if (!target) return '';
   const format = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
-  if (consumed >= target) return `Target ${format(target)} g protein sudah tercapai. Mantap, Ryann!`;
+  if (consumed >= target) return `Target ${format(target)} g protein sudah tercapai. Mantap!`;
   const balance = `Masih ${format(target - consumed)} g menuju target ${format(target)} g protein.`;
   // ponytail: a simple <20 g meal nudge, not an individualized meal plan.
   if (mealProtein !== undefined && mealProtein < 20) return `Meal ini punya ${format(mealProtein)} g protein. ${balance} Kalau cocok, bisa tambah telur, tempe, dada ayam, atau whey; log juga tambahannya ya.`;
@@ -241,7 +240,7 @@ export function validateBackup(input: unknown): AppData {
   if (data.version !== 1) invalid('version', 'is unsupported');
   const targetData = object(data.targets, 'targets', nutrientKeys);
   const targets: Partial<Nutrients> = {};
-  for (const key of nutrientKeys) if (Object.hasOwn(targetData, key)) targets[key] = number(targetData[key], `targets.${key}`, true, 1_000_000);
+  for (const key of nutrientKeys) if (Object.hasOwn(targetData, key)) targets[key] = number(targetData[key], `targets.${key}`, false, 1_000_000);
   const labels = unique(array(data.labels, 'labels', food, 10_000), 'labels');
   for (const label of labels) {
     if (label.source.name !== 'Package label' || label.source.url !== '' || label.source.dataType !== 'label') invalid('labels', 'must contain package-label nutrition');

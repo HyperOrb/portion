@@ -104,7 +104,7 @@ function normalizeFood(food) {
   };
 }
 
-export async function searchFoods({ query, cookingState = 'unknown', brand = '' } = {}) {
+export async function searchFoods({ query, name = '', cookingState = 'unknown', brand = '', source = 'auto' } = {}) {
   brand = brand ?? '';
   if (typeof query !== 'string' || query.trim().length < 2 || query.trim().length > 200) {
     throw new NutritionError(400, 'INVALID_SEARCH', 'Enter a food name between 2 and 200 characters.');
@@ -112,6 +112,18 @@ export async function searchFoods({ query, cookingState = 'unknown', brand = '' 
   if (typeof brand !== 'string' || brand.length > 100 || !STATES.has(cookingState)) {
     throw new NutritionError(400, 'INVALID_SEARCH', 'Choose a valid cooking state and a brand under 100 characters.');
   }
+  if (!['auto', 'usda', 'openfoodfacts'].includes(source) || typeof name !== 'string' || name.length > 200) {
+    throw new NutritionError(400, 'INVALID_SEARCH', 'Choose a nutrition source and a valid food name.');
+  }
+  const packagedQuery = name.trim() || query.trim();
+  if (source === 'openfoodfacts' || (source === 'auto' && (brand.trim() || cookingState === 'as_sold' || /\b(basreng|pilus)\b/i.test(packagedQuery)))) {
+    return searchPackages(packagedQuery, brand);
+  }
+  const foods = await searchUsda(query, cookingState, brand);
+  return foods.length || source === 'usda' ? foods : searchPackages(packagedQuery, brand);
+}
+
+async function searchUsda(query, cookingState, brand) {
   const stateTerm = ['raw', 'cooked'].includes(cookingState) ? cookingState : '';
   const words = [brand.trim(), query.trim()].join(' ').match(/[\p{L}\p{N}]+/gu) || [];
   if (!words.length) throw new NutritionError(400, 'INVALID_SEARCH', 'Enter a food name.');
@@ -141,6 +153,7 @@ export async function searchFoods({ query, cookingState = 'unknown', brand = '' 
 }
 
 export async function getFood(id) {
+  if (/^off-\d{8,14}$/.test(String(id))) return getPackage(String(id).slice(4));
   if (!/^\d{1,10}$/.test(String(id))) {
     throw new NutritionError(400, 'INVALID_FOOD_ID', 'Choose a valid FoodData Central record.');
   }
@@ -149,4 +162,77 @@ export async function getFood(id) {
     throw new NutritionError(422, 'INCOMPLETE_NUTRITION', 'This record has incomplete calories or macros, or its gram basis is unconfirmed. Choose another record or enter the complete package label.');
   }
   return food;
+}
+
+const OFF_FIELDS = 'code,product_name,brands,nutriments,nutrition_data_per,serving_size,product_quantity_unit,data_quality_errors_tags';
+const OFF_HEADERS = { 'User-Agent': 'Portion/1.0 (https://portion-ashy.vercel.app)', 'Content-Type': 'application/json' };
+
+async function packageRequest(url, body) {
+  let response;
+  try {
+    response = await fetch(url, { method: body ? 'POST' : 'GET', headers: OFF_HEADERS,
+      ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15_000) });
+  } catch {
+    throw new NutritionError(503, 'PACKAGE_UNAVAILABLE', 'Open Food Facts could not be reached. Try again, choose USDA, or enter your package label.');
+  }
+  if (!response.ok) {
+    if (response.status === 429) throw new NutritionError(429, 'PACKAGE_QUOTA', 'Open Food Facts is rate limited. Wait a minute before searching again, or use a saved package label.');
+    if (response.status === 404) throw new NutritionError(404, 'FOOD_NOT_FOUND', 'This Open Food Facts product is unavailable. Search again or enter your package label.');
+    throw new NutritionError(503, 'PACKAGE_UNAVAILABLE', 'Open Food Facts is temporarily unavailable. Try later or enter your package label.');
+  }
+  try { return await response.json(); }
+  catch { throw new NutritionError(502, 'PACKAGE_RESPONSE', 'Open Food Facts returned an unreadable response. Try again or enter your package label.'); }
+}
+
+function normalizePackage(product) {
+  if (!product || !/^\d{8,14}$/.test(product.code) || typeof product.product_name !== 'string' || !product.product_name.trim()) return null;
+  const serving = typeof product.serving_size === 'string' ? product.serving_size : '';
+  const gramMatch = !/\b(ml|cl|dl|l)\b/i.test(serving) && serving.match(/(\d+(?:[.,]\d+)?)\s*g\b/i);
+  const servingGrams = gramMatch ? Number(gramMatch[1].replace(',', '.')) : null;
+  // OFF's _100g fields can represent 100 ml. Confirm a mass basis, never infer density.
+  if (!['100g', 'serving'].includes(product.nutrition_data_per)
+    || (product.nutrition_data_per === 'serving' && !(servingGrams > 0))
+    || ['ml', 'l', 'cl', 'dl'].includes(String(product.product_quantity_unit || '').toLowerCase())
+    || !(String(product.product_quantity_unit || '').toLowerCase() === 'g' || servingGrams > 0)
+    || product.data_quality_errors_tags?.length) return null;
+  const n = product.nutriments || {};
+  const read = (key, unit, max) => typeof n[`${key}_100g`] === 'number' && Number.isFinite(n[`${key}_100g`])
+    && n[`${key}_100g`] >= 0 && n[`${key}_100g`] <= max && String(n[`${key}_unit`] || '').toLowerCase() === unit ? n[`${key}_100g`] : null;
+  const per100g = { calories: read('energy-kcal', 'kcal', 1000), protein: read('proteins', 'g', 100), carbs: read('carbohydrates', 'g', 100), fat: read('fat', 'g', 100) };
+  if (Object.values(per100g).some(value => value === null)) return null;
+  const name = product.product_name.trim();
+  const brand = typeof product.brands === 'string' ? product.brands : '';
+  return {
+    id: `off-${product.code}`, name, brand, cookingState: 'as_sold', per100g,
+    portions: servingGrams > 0 && servingGrams <= 100000 ? [{ description: serving, grams: servingGrams }] : [],
+    assumptions: ['Community package-label data from Open Food Facts (ODbL). Check the exact brand, flavor, and nutrition against your package.', 'Values apply to the product as sold, not a guessed homemade recipe or a different brand.'],
+    source: { name: 'Open Food Facts', id: product.code, url: `https://world.openfoodfacts.org/product/${product.code}`,
+      description: `${name}${brand ? ` — ${brand}` : ''}. Community package label; confirm with your package. Data under ODbL.`, dataType: 'Community package label' },
+  };
+}
+
+async function getPackage(code) {
+  const result = await packageRequest(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${OFF_FIELDS}`);
+  const food = result?.status === 1 && result.product?.code === code ? normalizePackage(result.product) : null;
+  if (!food) throw new NutritionError(422, 'INCOMPLETE_NUTRITION', 'This package record has missing or invalid calories/macros, or an unconfirmed gram basis. Enter the complete nutrition label from your package instead.');
+  return food;
+}
+
+async function searchPackages(query, brand) {
+  // These aliases identify foods, not nutrition: pilus is often a tapioca snack, not peanuts.
+  query = query.replace(/\bkacang\s+pilus\b/gi, 'pilus');
+  const words = query.match(/[\p{L}\p{N}]+/gu) || [];
+  if (!words.length) throw new NutritionError(400, 'INVALID_SEARCH', 'Enter a food name.');
+  const brandWords = brand.match(/[\p{L}\p{N}]+/gu) || [];
+  // Unqualified quoted terms become Lucene filters against "*" and miss real products.
+  const q = [...words.map(word => word.toLowerCase()), ...(brandWords.length ? [`brands:"${brandWords.join(' ')}"`] : [])].join(' ');
+  const result = await packageRequest('https://search.openfoodfacts.org/search', { q, langs: ['id', 'en'], page_size: 8, fields: ['code', 'product_name', 'brands'] });
+  if (!Array.isArray(result?.hits)) throw new NutritionError(502, 'PACKAGE_RESPONSE', 'Open Food Facts returned an unexpected search response. Try again or enter a package label.');
+  // ponytail: verify at most four product details per search to respect OFF's small read quota.
+  const ids = [...new Set(result.hits.map(hit => hit.code).filter(code => /^\d{8,14}$/.test(code)))].slice(0, 4);
+  const results = await Promise.allSettled(ids.map(getPackage));
+  const foods = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+  const failure = results.find(result => result.status === 'rejected' && result.reason.status !== 422);
+  if (!foods.length && failure) throw failure.reason;
+  return foods;
 }

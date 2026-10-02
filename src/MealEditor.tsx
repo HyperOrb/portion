@@ -42,6 +42,7 @@ export function LabelForm({ initialName = '', onSave, onClose }: { initialName?:
 
 function IngredientEditor({ item, labels, onChange, onRemove, onLabel }: { item: Ingredient; labels: NutritionFood[]; onChange: (item: Ingredient) => void; onRemove: () => void; onLabel: (label: NutritionFood) => Promise<boolean> }) {
   const [query, setQuery] = useState(item.query || item.name);
+  const [searchSource, setSearchSource] = useState<'auto' | 'usda' | 'openfoodfacts'>('auto');
   const [foods, setFoods] = useState<RichFood[]>([]);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,13 +55,13 @@ function IngredientEditor({ item, labels, onChange, onRemove, onLabel }: { item:
     if (!query.trim()) { setError('Enter a food or brand to search.'); return; }
     setBusy(true); setError(''); setShowSearch(true);
     try {
-      const result = await api<{ foods: RichFood[] }>('/api/foods/search', { query: query.trim(), cookingState: item.cookingState, brand: item.brand });
+      const result = await api<{ foods: RichFood[] }>('/api/foods/search', { query: query.trim(), name: query === (item.query || item.name) ? item.name : query.trim(), cookingState: item.cookingState, brand: item.brand, source: searchSource });
       setFoods(result.foods); setSearched(true);
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   }
 
-  // One initial lookup; edits only trigger a lookup when requested to conserve USDA quota.
+  // One initial lookup; edits only search when requested to conserve provider quotas.
   useEffect(() => { if (!item.food && !item.clarification && item.name) void search(); }, []);
 
   async function selectFood(food: RichFood) {
@@ -106,18 +107,19 @@ function IngredientEditor({ item, labels, onChange, onRemove, onLabel }: { item:
       <p className="small muted">{item.food.source.url ? <a href={item.food.source.url} target="_blank" rel="noreferrer">{item.food.source.name} · {item.food.source.id}</a> : item.food.source.name} · {item.food.source.dataType}</p>
       <p className="small muted">Per 100 g: {number(item.food.per100g.calories)} kcal · P {number(item.food.per100g.protein)} g · C {number(item.food.per100g.carbs)} g · F {number(item.food.per100g.fat)} g</p>
       <details><summary>Source details & assumptions</summary><p className="small muted">{item.food.source.description}</p>{details?.assumptions?.map((text, index) => <p className="small muted" key={index}>{text}</p>)}</details>
-      {!!details?.portions?.length && <label className="portion-select">Or use a USDA serving weight<select value="" onChange={event => {
+      {!!details?.portions?.length && <label className="portion-select">Or use a source serving weight<select value="" onChange={event => {
         const portion = details.portions?.[Number(event.target.value)];
-        if (portion) onChange({ ...item, grams: portion.grams, amount: portion.grams, unit: 'g', assumptions: [...item.assumptions.filter(a => !a.startsWith('USDA serving:')), `USDA serving: ${portion.description} = ${portion.grams} g.`] });
+        if (portion) onChange({ ...item, grams: portion.grams, amount: portion.grams, unit: 'g', assumptions: [...item.assumptions.filter(a => !a.startsWith('USDA serving:') && !a.startsWith('Source serving:')), `Source serving: ${portion.description} = ${portion.grams} g.`] });
       }}><option value="">Choose one serving…</option>{details.portions.map((portion, index) => <option value={index} key={index}>{portion.description} ({portion.grams} g)</option>)}</select></label>}
       {item.grams !== null && <div className="ingredient-total"><strong>{number(totals.calories)} <span className="small">kcal</span></strong><MacroLine totals={totals} /></div>}
     </div>}
     {showSearch && <div className="food-search">
       <p className="small"><strong>{item.food ? 'Choose another source' : 'Choose a nutrition match'}</strong> <span className="muted">Check the food, brand, and preparation.</span></p>
-      <form className="search-row" onSubmit={event => { event.preventDefault(); void search(); }}><input aria-label={`Search nutrition for ${item.name}`} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search USDA foods…" maxLength={160} /><button className="button secondary" disabled={busy || !!item.clarification} title={item.clarification ? 'Answer the weight question first' : undefined}><Icon name="search" />{busy ? 'Searching…' : 'Search'}</button></form>
+      <label>Nutrition database<select value={searchSource} onChange={event => { setSearchSource(event.target.value as typeof searchSource); setFoods([]); setSearched(false); setError(''); }}><option value="auto">Automatic — everyday or packaged foods</option><option value="usda">USDA — everyday ingredients</option><option value="openfoodfacts">Open Food Facts — packaged & local snacks</option></select></label>
+      <form className="search-row" onSubmit={event => { event.preventDefault(); void search(); }}><input aria-label={`Search nutrition for ${item.name}`} value={query} onChange={event => setQuery(event.target.value)} placeholder="Food name or exact product…" maxLength={160} /><button className="button secondary" disabled={busy || !!item.clarification} title={item.clarification ? 'Answer the weight question first' : undefined}><Icon name="search" />{busy ? 'Searching…' : 'Search'}</button></form>
       {labels.length > 0 && <label>Saved package label<select value="" onChange={event => { const food = labels.find(label => label.id === event.target.value); if (food) void selectFood(food); }}><option value="">Choose your saved food…</option>{labels.map(food => <option value={food.id} key={food.id}>{food.name}</option>)}</select></label>}
-      {foods.length > 0 && <div className="candidates">{foods.map(food => <button className="candidate" key={food.id} disabled={busy} onClick={() => void selectFood(food)}><span><strong>{food.name}</strong><small>{food.source.description !== food.name ? `${food.source.description} · ` : ''}{food.source.dataType} · {number(food.per100g.calories)} kcal / 100 g · {food.cookingState === 'unknown' ? 'check preparation' : food.cookingState?.replace('_', ' ')}</small></span><Icon name="plus" size={18} /></button>)}</div>}
-      {searched && foods.length === 0 && <p className="small warning-text">No complete nutrition match found. Try a more specific food, or enter its package label.</p>}
+      {foods.length > 0 && <div className="candidates">{foods.map(food => <button className="candidate" key={food.id} disabled={busy} onClick={() => void selectFood(food)}><span><strong>{food.name}</strong><small>{food.source.name} · {food.source.description !== food.name ? `${food.source.description} · ` : ''}{number(food.per100g.calories)} kcal / 100 g · {food.cookingState === 'unknown' ? 'check preparation' : food.cookingState?.replace('_', ' ')}</small></span><Icon name="plus" size={18} /></button>)}</div>}
+      {searched && foods.length === 0 && <p className="small warning-text">No complete nutrition match for “{item.name || query}” yet. Try the exact brand or flavor, choose another database, or save its package label once for reuse.</p>}
       <button className="text-button label-action" onClick={() => setShowLabel(true)}>No reliable match? Enter a package label <Icon name="plus" size={14} /></button>
     </div>}
     {error && <p role="alert" className="error-message">{error}</p>}

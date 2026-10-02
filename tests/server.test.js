@@ -20,12 +20,12 @@ test('hosted APIs fail closed without cloud configuration or a verified signed-i
   const verified = [];
   const cloud = { auth: { getUser: async token => { verified.push(token); return token === 'valid-user-token' ? { data: { user: { id: 'user-one' } } } : { data: { user: null }, error: { message: 'private provider detail' } }; } } };
   const hosted = await app(t, { env: { SUPABASE_URL: 'https://test.supabase.co', GEMINI_API_KEY: 'private-test-key' }, cloud, parse });
-  for (const [path, body] of [['/api/parse', { description: '200 g chicken' }], ['/api/foods/search', { query: 'rice' }], ['/api/foods/123', undefined]]) {
+  for (const [path, body] of [['/api/parse', { description: '200 g chicken' }], ['/api/foods/search', { query: 'rice' }], ['/api/foods/123', undefined], ['/api/foods/off-1234567890123', undefined]]) {
     assert.equal((await hosted.request(path, body)).status, 401);
     const invalid = await hosted.request(path, body, { Authorization: 'Bearer forged-token' });
     assert.equal(invalid.status, 401); assert.ok(!JSON.stringify(await invalid.json()).includes('private provider detail'));
   }
-  assert.equal(calls, 0); assert.equal(verified.length, 3);
+  assert.equal(calls, 0); assert.equal(verified.length, 4);
 });
 
 test('separate hosted handlers share a durable budget, count failed attempts, and never bypass a failed safeguard', async t => {
@@ -141,9 +141,19 @@ test('JSON, input limits, and foreign origins are rejected before reaching Googl
 
 test('USDA search and detail are exposed without Gemini or a cloud food log', async (t) => {
   const record = { id: '123', per100g: { calories: 165, protein: 31, carbs: 0, fat: 3.6 } };
-  const { request } = await app(t, { env: {}, search: async (input) => { assert.deepEqual(input, { query: 'chicken', cookingState: 'cooked', brand: '' }); return [record]; }, food: async (id) => { assert.equal(id, '123'); return record; } });
+  const { request } = await app(t, { env: {}, search: async (input) => { assert.deepEqual(input, { query: 'chicken', name: '', cookingState: 'cooked', brand: '', source: 'auto' }); return [record]; }, food: async (id) => { assert.equal(id, '123'); return record; } });
   assert.deepEqual(await (await request('/api/foods/search', { query: 'chicken', cookingState: 'cooked', brand: null })).json(), { foods: [record] });
   assert.deepEqual(await (await request('/api/foods/123')).json(), { food: record });
+});
+
+test('package search keeps the local name and source choice, and routes OFF product IDs', async t => {
+  const record = { id: 'off-1234567890123', name: 'Test pilus' };
+  const { request } = await app(t, { env: {}, search: async input => {
+    assert.deepEqual(input, { query: 'pilus', name: 'kacang pilus', brand: 'Test', cookingState: 'as_sold', source: 'openfoodfacts' });
+    return [record];
+  }, food: async id => { assert.equal(id, record.id); return record; } });
+  assert.deepEqual(await (await request('/api/foods/search', { query: 'pilus', name: 'kacang pilus', brand: 'Test', cookingState: 'as_sold', source: 'openfoodfacts' })).json(), { foods: [record] });
+  assert.deepEqual(await (await request(`/api/foods/${record.id}`)).json(), { food: record });
 });
 
 test('built client is served while files outside dist stay inaccessible', async (t) => {
@@ -232,6 +242,8 @@ test('Gemini REST transport pins the model, persona, strict extraction schema, a
     assert.match(instruction, /bakar\/grilled, goreng\/fried, kukus\/steamed, and rebus\/boiled/);
     assert.match(instruction, /minyak\/oil, mentega\/butter, santan\/coconut milk, tepung\/flour/);
     assert.match(instruction, /Never claim an unmentioned addition was used or invent its amount/);
+    assert.match(instruction, /basreng stays basreng, and kacang pilus uses pilus/);
+    assert.match(instruction, /never replace it with plain peanuts/);
     assert.match(instruction, /Do not calculate, estimate, or return any calories, nutrients, macros/);
     assert.equal(body.tools, undefined);
     return new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'internal reasoning is not JSON' }, { text: JSON.stringify(validMeal()) }] } }] }));

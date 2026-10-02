@@ -79,7 +79,7 @@ test('branded search batch-verifies gram basis and does not silently accept ml',
     assert.deepEqual(JSON.parse(options.body).fdcIds, [1, 2]);
     return Response.json([record({ fdcId: 1, dataType: 'Branded', servingSizeUnit: 'g' }), record({ fdcId: 2, dataType: 'Branded', servingSizeUnit: 'ml' })]);
   });
-  const foods = await searchFoods({ query: 'yogurt', brand: 'Example', cookingState: 'as_sold' });
+  const foods = await searchFoods({ query: 'yogurt', brand: 'Example', cookingState: 'as_sold', source: 'usda' });
   assert.deepEqual(foods.map(food => food.id), ['1']);
   assert.equal(calls, 2);
 });
@@ -96,4 +96,65 @@ test('invalid searches and IDs never reach upstream', async () => {
   await assert.rejects(getFood('../not-a-food'), error => error.status === 400);
   await assert.rejects(searchFoods({ query: '' }), error => error.status === 400);
   await assert.rejects(searchFoods({ query: 'rice', cookingState: 'fiction' }), error => error.status === 400);
+  await assert.rejects(searchFoods({ query: 'rice', source: 'https://untrusted.example' }), error => error.status === 400);
+  await assert.rejects(searchFoods({ query: 'rice', name: {} }), error => error.status === 400);
+});
+
+// Models the public OFF product schema; these are test data, never runtime foods.
+function packageRecord(overrides = {}) {
+  return { code: '1234567890123', product_name: 'Test pilus', brands: 'Test brand', nutrition_data_per: '100g',
+    serving_size: '1 portion (20 g)', product_quantity_unit: 'g', data_quality_errors_tags: [],
+    nutriments: { 'energy-kcal_100g': 500, 'energy-kcal_unit': 'kcal', proteins_100g: 0, proteins_unit: 'g', carbohydrates_100g: 65, carbohydrates_unit: 'g', fat_100g: 30, fat_unit: 'g' }, ...overrides };
+}
+
+test('local snack names search OFF and verify complete gram-based package details', async () => {
+  const calls = [];
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push(String(url));
+    assert.match(options.headers['User-Agent'], /^Portion\//);
+    if (String(url).includes('search.openfoodfacts.org')) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.q, 'pilus');
+      assert.doesNotMatch(body.q, /kacang|peanut/);
+      assert.deepEqual(body.langs, ['id', 'en']);
+      return Response.json({ hits: [{ code: '1234567890123' }, { code: '1234567890124' }] });
+    }
+    const product = packageRecord(String(url).includes('1234567890124') ? { code: '1234567890124', nutriments: {} } : {});
+    return Response.json({ status: 1, product });
+  });
+  const foods = await searchFoods({ query: 'pilus tapioca snack', name: 'kacang pilus', cookingState: 'as_sold' });
+  assert.equal(foods.length, 1);
+  assert.equal(foods[0].id, 'off-1234567890123');
+  assert.equal(foods[0].source.name, 'Open Food Facts');
+  assert.equal(foods[0].cookingState, 'as_sold');
+  assert.deepEqual(foods[0].per100g, { calories: 500, protein: 0, carbs: 65, fat: 30 });
+  assert.deepEqual(foods[0].portions, [{ description: '1 portion (20 g)', grams: 20 }]);
+  assert.match(foods[0].source.description, /Test brand/);
+  assert.match(foods[0].source.url, /\/product\/1234567890123$/);
+  assert.ok(calls.every(url => !url.includes('usda')));
+  assert.equal((await getFood('off-1234567890123')).source.name, 'Open Food Facts');
+});
+
+test('OFF never supplies missing macros, guessed density, prepared-only data or invalid units', async () => {
+  const valid = packageRecord();
+  for (const overrides of [
+    { nutrition_data_per: '100ml' }, { nutrition_data_per: undefined }, { product_quantity_unit: 'ml' },
+    { nutrition_data_per: 'serving', serving_size: '1 cup (100 ml)' },
+    { product_quantity_unit: undefined, serving_size: '' },
+    { nutriments: { ...valid.nutriments, proteins_100g: null } },
+    { nutriments: { ...valid.nutriments, proteins_100g: '0' } },
+    { nutriments: { ...valid.nutriments, proteins_unit: 'mg' } },
+    { nutriments: { ...valid.nutriments, 'energy-kcal_100g': undefined, 'energy-kcal_prepared_100g': 500 } },
+    { data_quality_errors_tags: ['en:nutrition-value-over-1000'] },
+  ]) {
+    mock.method(globalThis, 'fetch', async () => Response.json({ status: 1, product: packageRecord(overrides) }));
+    await assert.rejects(getFood('off-1234567890123'), error => error.status === 422);
+  }
+});
+
+test('OFF empty coverage remains unresolved and errors do not expose provider details', async () => {
+  mock.method(globalThis, 'fetch', async () => Response.json({ hits: [] }));
+  assert.deepEqual(await searchFoods({ query: 'basreng', source: 'openfoodfacts' }), []);
+  mock.method(globalThis, 'fetch', async () => new Response('private provider body', { status: 429 }));
+  await assert.rejects(searchFoods({ query: 'pilus', source: 'openfoodfacts' }), error => error.status === 429 && /Open Food Facts/.test(error.message) && !error.message.includes('private'));
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { freshData, hasUnresolved, loadData, localDate, mealTotals, proteinFeedback, RYANN_TARGETS, saveData, STORAGE_KEY, validateBackup, type Ingredient } from '../src/domain.ts';
+import { freshData, hasUnresolved, loadData, localDate, mealTotals, proteinFeedback, saveData, STORAGE_KEY, validateBackup, type Ingredient } from '../src/domain.ts';
 
 const item: Ingredient = {
   id: 'chicken', name: 'Chicken breast', amount: 200, unit: 'g', grams: 200,
@@ -74,14 +74,16 @@ test('round-trips verified meals, templates, labels, and optional targets withou
   assert.equal(data.usualMeals[0].items[0].grams, 200);
   data.meals[0].items[0].food!.per100g.protein = 10;
   assert.equal(original.meals[0].items[0].food!.per100g.protein, 31);
-  assert.deepEqual(freshData(), { version: 1, meals: [], usualMeals: [], labels: [], targets: { ...RYANN_TARGETS } });
+  assert.deepEqual(freshData(), { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 } });
 });
 
 test('personal targets remain editable and protein feedback follows sourced totals and actual targets', () => {
   const data = freshData();
-  assert.deepEqual(data.targets, { calories: 2600, protein: 180, carbs: 290, fat: 80 });
+  assert.deepEqual(data.targets, { calories: 0, protein: 0, carbs: 0, fat: 0 });
   data.targets.protein = 150;
-  assert.equal(freshData().targets.protein, 180);
+  assert.equal(freshData().targets.protein, 0);
+  assert.deepEqual(validateBackup(freshData()), freshData());
+  assert.equal(validateBackup(backup()).targets.protein, 150);
   assert.equal(validateBackup({ ...data, targets: {} }).targets.protein, undefined);
   const totals = mealTotals([item]);
   assert.match(proteinFeedback(totals.protein, 180), /118 g.*180 g/);
@@ -89,6 +91,8 @@ test('personal targets remain editable and protein feedback follows sourced tota
   assert.doesNotMatch(proteinFeedback(totals.protein, 150, totals.protein), /tambah/);
   assert.match(proteinFeedback(190, 180, 5), /tercapai/);
   assert.doesNotMatch(proteinFeedback(190, 180, 5), /tambah|-/);
+  assert.doesNotMatch(proteinFeedback(190, 180, 5), /Ryann/);
+  assert.equal(proteinFeedback(62, 0), '');
   assert.equal(proteinFeedback(62, undefined), '');
 });
 
@@ -104,7 +108,7 @@ test('rejects invalid dates, amounts, unsourced values, unresolved items, and du
     data => { data.meals[0].items[0].food!.cookingState = 'invented'; },
     data => { data.meals[0].items[0].food = null; },
     data => { data.meals[0].items.push(structuredClone(data.meals[0].items[0])); },
-    data => { data.targets.protein = 0; },
+    data => { data.targets.protein = -1; },
   ];
   for (const mutate of mutations) {
     const data = backup();

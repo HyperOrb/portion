@@ -29,3 +29,7 @@ The existing interface is the direct-build target for this small extension. Refe
 ## Account extension
 
 The existing Portion interface remains the direct-build target. Reuse its panels, system font, green actions, and native labeled inputs for a single centered sign-in form. Account management and device import belong in Settings; the primary meal flow and three-link navigation stay intact. Show explicit connection and save states using the existing notices. Preserve journal privacy on sign-out and surface stale-save conflicts with export/reload actions. Phone sign-in was rendered and inspected at 390px, with overflow checks at 320, 390, 768, and 1440px. Cloud Settings uses the existing stacked mobile panels.
+
+## Shared-use and local-food extension
+
+The current Portion interface is the direct-build reference. Refero copywriting guidance calls for orientation, status, and the next action. Remove the fixed user's name and personal preset; explain zero targets in the existing Settings form, with a reset action. Use the existing native select for the nutrition database and existing candidate buttons for package results. Each candidate names its source and product; an empty result asks for the exact product or a reusable label. Preserve the current canvas, typography, input sizes, and review/save sequence. No new navigation, images, or account profile form.

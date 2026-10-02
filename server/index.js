@@ -153,9 +153,9 @@ export function createRequestHandler({ env = process.env, parse = parseMeal, sea
         if (pathname === '/api/foods/search' && req.method === 'POST') {
           const body = await readJson(req);
           const cookingState = body.cookingState ?? 'unknown';
-          return json(res, 200, { foods: await search({ query: body.query, cookingState, brand: body.brand ?? '' }) });
+          return json(res, 200, { foods: await search({ query: body.query, name: body.name ?? '', cookingState, brand: body.brand ?? '', source: body.source ?? 'auto' }) });
         }
-        if (/^\/api\/foods\/\d{1,10}$/.test(pathname) && req.method === 'GET') return json(res, 200, { food: await food(pathname.split('/').at(-1)) });
+        if (/^\/api\/foods\/(?:\d{1,10}|off-\d{8,14})$/.test(pathname) && req.method === 'GET') return json(res, 200, { food: await food(pathname.split('/').at(-1)) });
         throw new ApiError(404, 'NOT_FOUND', 'API endpoint not found.');
       }
       if (apiOnly) throw new ApiError(404, 'NOT_FOUND', 'API endpoint not found.');

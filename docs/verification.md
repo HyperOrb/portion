@@ -2,6 +2,14 @@
 
 October 1–2, 2026.
 
+## Shared-use and Indonesian snack extension — October 2
+
+- `npm test`: **41 passing** after adding package normalization, gram/ml and missing-value checks, Open Food Facts lookup/routing, provider error sanitization, zero-target round-trips, and anonymous-access checks for the new product ID format. Existing positive targets remain unchanged on load and restore.
+- All fixed-name greetings and the personal target preset were removed. New device/cloud journals begin with four zero targets; zero means unset and does not divide by zero or show protein coaching. Settings can reset existing targets explicitly.
+- A real Gemini request for the user's Indonesian basreng/pilus description returned two distinct snack items, local lookup identities, no raw/cooked questions, and no guessed gram weights. No nutrition came from Gemini. This was an isolated local browser origin; no meals were added to the user's account or original device journal.
+- Real Open Food Facts searches and full product reads returned complete Garuda pilus records. Selecting `8992775211434` and its source-backed 20 g serving produced 99.9 kcal, 0 g protein, 13 g carbs, and 6 g fat; editing to 50 g produced 249.8 kcal, 32.5 g carbs, and 15 g fat. The unresolved basreng kept saving disabled; removing it from the draft enabled saving. No complete basreng record was found, and no replacement nutrition was invented.
+- Review had no horizontal overflow at 390px and 320px. The 390px review was visually inspected against the existing interface lock; a screenshot is ignored at `output/portion-snack-review.jpg`. Browser viewport overrides were reset after testing.
+
 ## Account and hosting extension — October 2
 
 - `npm test`: **37 passing**. The actual Supabase migration runs in PGlite (WASM PostgreSQL) with Supabase-style test roles and claims. Tests check owner-only reads/writes/deletes, blocked ownership changes, automatic revisions, stale updates, restricted budget RPCs, daily rollover, pacing, and lease ownership. This validates SQL semantics without creating a hosted project.

@@ -12,7 +12,7 @@ function SignIn({ recovery, onRecovered, onExitRecovery }: { recovery: boolean; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const title = recovery ? 'Choose a new password.' : mode === 'signup' ? 'Make yourself at home.' : mode === 'forgot' ? 'Reset your password.' : 'Welcome back, Ryann.';
+  const title = recovery ? 'Choose a new password.' : mode === 'signup' ? 'Make yourself at home.' : mode === 'forgot' ? 'Reset your password.' : 'Welcome back.';
   return <AccountShell><span className="eyebrow">Your Portion account</span><h1>{title}</h1><p className="muted small">{recovery ? 'Save your new password to return to your journal.' : 'Keep your meals, usuals, labels, and targets together across devices.'}</p>
     <form onSubmit={async event => {
       event.preventDefault(); if (!supabase || busy) return;
