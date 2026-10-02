@@ -42,12 +42,73 @@ export type Meal = {
 
 export type UsualMeal = Omit<Meal, 'date'>;
 export type LabelFood = NutritionFood;
+
+export type Gender = 'male' | 'female';
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active';
+export type FitnessGoal = 'fat_loss' | 'maintain' | 'muscle_gain';
+
+export type UserProfile = {
+  gender: Gender;
+  age: number;
+  heightCm: number;
+  weightKg: number;
+  activityLevel: ActivityLevel;
+  goal: FitnessGoal;
+};
+
+export const activityMultipliers: Record<ActivityLevel, number> = {
+  sedentary: 1.2,    // Jarang / tidak pernah olahraga
+  light: 1.375,      // Ringan: 1-2x per minggu
+  moderate: 1.55,    // Sedang: 3-5x per minggu
+  active: 1.725,     // Rutin / berat: 6-7x per minggu
+};
+
+/** Mifflin-St Jeor BMR (Basal Metabolic Rate in kcal) */
+export function calculateBmr(profile: Pick<UserProfile, 'gender' | 'age' | 'heightCm' | 'weightKg'>): number {
+  const base = 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age;
+  return Math.round(profile.gender === 'male' ? base + 5 : base - 161);
+}
+
+/** TDEE (Total Daily Energy Expenditure in kcal) */
+export function calculateTdee(profile: Pick<UserProfile, 'gender' | 'age' | 'heightCm' | 'weightKg' | 'activityLevel'>): number {
+  const bmr = calculateBmr(profile);
+  const mult = activityMultipliers[profile.activityLevel] ?? 1.2;
+  return Math.round(bmr * mult);
+}
+
+/**
+ * Calculates daily calorie and macronutrient targets based on user profile and fitness goal.
+ * - Fat loss: ~450 kcal deficit (minimum 1200 kcal), 2.0g protein/kg bodyweight
+ * - Maintenance: TDEE, 1.6g protein/kg
+ * - Muscle gain: ~300 kcal lean surplus, 1.8g protein/kg
+ * - Healthy fats: ~25% total calories (minimum 30g)
+ * - Carbs: Remaining calories
+ */
+export function calculateNutritionTargets(profile: UserProfile): Nutrients {
+  const tdee = calculateTdee(profile);
+  let calories = tdee;
+  if (profile.goal === 'fat_loss') {
+    calories = Math.max(1200, Math.round(tdee - 450));
+  } else if (profile.goal === 'muscle_gain') {
+    calories = Math.round(tdee + 300);
+  }
+
+  const proteinFactor = profile.goal === 'fat_loss' ? 2.0 : profile.goal === 'muscle_gain' ? 1.8 : 1.6;
+  const protein = Math.round(profile.weightKg * proteinFactor);
+  const fat = Math.max(30, Math.round((calories * 0.25) / 9));
+  const remainingCalories = calories - (protein * 4) - (fat * 9);
+  const carbs = Math.max(50, Math.round(remainingCalories / 4));
+
+  return { calories, protein, carbs, fat };
+}
+
 export type AppData = {
   version: 1;
   meals: Meal[];
   usualMeals: UsualMeal[];
   labels: NutritionFood[];
   targets: Partial<Nutrients>;
+  profile?: UserProfile | null;
 };
 
 type StorageReader = Pick<Storage, 'getItem'>;
@@ -57,7 +118,7 @@ export const STORAGE_KEY = 'calorie-count-v1';
 const nutrientKeys = ['calories', 'protein', 'carbs', 'fat'] as const;
 
 export function freshData(): AppData {
-  return { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 } };
+  return { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 }, profile: null };
 }
 
 /** Friendly feedback uses sourced totals on this device, without another AI request. */
@@ -246,9 +307,33 @@ function usualMeal(value: unknown, path: string, dated = false): UsualMeal | Mea
   return dated ? { ...result, date: calendarDate(data.date, `${path}.date`) } : result;
 }
 
+function userProfile(value: unknown, path: string): UserProfile {
+  const data = object(value, path, ['gender', 'age', 'heightCm', 'weightKg', 'activityLevel', 'goal']);
+  const gender = string(data.gender, `${path}.gender`);
+  if (gender !== 'male' && gender !== 'female') invalid(`${path}.gender`, 'must be male or female');
+  const age = number(data.age, `${path}.age`, true, 120);
+  if (age < 10) invalid(`${path}.age`, 'must be at least 10');
+  const heightCm = number(data.heightCm, `${path}.heightCm`, true, 250);
+  if (heightCm < 50) invalid(`${path}.heightCm`, 'must be at least 50 cm');
+  const weightKg = number(data.weightKg, `${path}.weightKg`, true, 350);
+  if (weightKg < 20) invalid(`${path}.weightKg`, 'must be at least 20 kg');
+  const activityLevel = string(data.activityLevel, `${path}.activityLevel`);
+  if (!['sedentary', 'light', 'moderate', 'active'].includes(activityLevel)) invalid(`${path}.activityLevel`, 'is invalid');
+  const goal = string(data.goal, `${path}.goal`);
+  if (!['fat_loss', 'maintain', 'muscle_gain'].includes(goal)) invalid(`${path}.goal`, 'is invalid');
+  return {
+    gender: gender as Gender,
+    age: Math.round(age),
+    heightCm: Math.round(heightCm * 10) / 10,
+    weightKg: Math.round(weightKg * 10) / 10,
+    activityLevel: activityLevel as ActivityLevel,
+    goal: goal as FitnessGoal,
+  };
+}
+
 /** Validates and copies every field. Unknown fields (including raw meal text) are refused. */
 export function validateBackup(input: unknown): AppData {
-  const data = object(input, 'backup', ['version', 'meals', 'usualMeals', 'labels', 'targets']);
+  const data = object(input, 'backup', ['version', 'meals', 'usualMeals', 'labels', 'targets', 'profile']);
   if (data.version !== 1) invalid('version', 'is unsupported');
   const targetData = object(data.targets, 'targets', nutrientKeys);
   const targets: Partial<Nutrients> = {};
@@ -257,12 +342,17 @@ export function validateBackup(input: unknown): AppData {
   for (const label of labels) {
     if (label.source.name !== 'Package label' || label.source.url !== '' || label.source.dataType !== 'label') invalid('labels', 'must contain package-label nutrition');
   }
+  let profile: UserProfile | null = null;
+  if (data.profile !== undefined && data.profile !== null) {
+    profile = userProfile(data.profile, 'profile');
+  }
   return {
     version: 1,
     meals: unique(array(data.meals, 'meals', (value, path) => usualMeal(value, path, true) as Meal), 'meals'),
     usualMeals: unique(array(data.usualMeals, 'usualMeals', (value, path) => usualMeal(value, path) as UsualMeal, 10_000), 'usualMeals'),
     labels,
     targets,
+    profile,
   };
 }
 

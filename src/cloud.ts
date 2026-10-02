@@ -52,5 +52,6 @@ export function mergeDeviceJournal(account: AppData, device: AppData): AppData {
     Object.assign(merged, { [key]: [...account[key], ...device[key].filter(item => !ids.has(item.id))] });
   }
   if (!account.meals.length && !account.usualMeals.length && !account.labels.length) merged.targets = structuredClone(device.targets);
+  if (!account.profile && device.profile) merged.profile = structuredClone(device.profile);
   return validateBackup(merged);
 }

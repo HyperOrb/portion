@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { freshData, hasUnresolved, loadData, localDate, mealTotals, nutritionUnit, ingredientQuantity, proteinFeedback, saveData, STORAGE_KEY, validateBackup, type Ingredient } from '../src/domain.ts';
+import { calculateBmr, calculateNutritionTargets, calculateTdee, freshData, hasUnresolved, loadData, localDate, mealTotals, nutritionUnit, ingredientQuantity, proteinFeedback, saveData, STORAGE_KEY, validateBackup, type Ingredient, type UserProfile } from '../src/domain.ts';
 
 const item: Ingredient = {
   id: 'chicken', name: 'Chicken breast', amount: 200, unit: 'g', grams: 200,
@@ -105,7 +105,7 @@ test('round-trips verified meals, templates, labels, and optional targets withou
   assert.equal(data.usualMeals[0].items[0].grams, 200);
   data.meals[0].items[0].food!.per100g!.protein = 10;
   assert.equal(original.meals[0].items[0].food!.per100g!.protein, 31);
-  assert.deepEqual(freshData(), { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 } });
+  assert.deepEqual(freshData(), { version: 1, meals: [], usualMeals: [], labels: [], targets: { calories: 0, protein: 0, carbs: 0, fat: 0 }, profile: null });
 });
 
 test('personal targets remain editable and protein feedback follows sourced totals and actual targets', () => {
@@ -179,4 +179,93 @@ test('storage validates before writing and preserves unreadable existing data', 
   assert.throws(() => saveData(invalid, storage), /Invalid backup/);
   assert.equal(values.get(STORAGE_KEY), '{broken');
   assert.throws(() => saveData(backup(), { setItem: () => { throw new Error('Quota exceeded'); } }), /export a backup/);
+});
+
+test('calculates BMR, TDEE, and daily macro targets accurately using Mifflin-St Jeor and goal multipliers', () => {
+  const maleProfile: UserProfile = {
+    gender: 'male',
+    age: 25,
+    heightCm: 175,
+    weightKg: 70,
+    activityLevel: 'moderate', // 1.55
+    goal: 'fat_loss',
+  };
+
+  // Male BMR: 10 * 70 + 6.25 * 175 - 5 * 25 + 5 = 700 + 1093.75 - 125 + 5 = 1673.75 -> 1674
+  assert.equal(calculateBmr(maleProfile), 1674);
+  // TDEE: 1674 * 1.55 = 2594.7 -> 2595
+  assert.equal(calculateTdee(maleProfile), 2595);
+
+  const fatLossTargets = calculateNutritionTargets(maleProfile);
+  // Fat loss calories: 2595 - 450 = 2145
+  assert.equal(fatLossTargets.calories, 2145);
+  // Protein: 70 * 2.0 = 140
+  assert.equal(fatLossTargets.protein, 140);
+  // Fat: 2145 * 0.25 / 9 = 59.58 -> 60
+  assert.equal(fatLossTargets.fat, 60);
+  // Carbs: (2145 - 140 * 4 - 60 * 9) / 4 = (2145 - 560 - 540) / 4 = 1045 / 4 = 261.25 -> 261
+  assert.equal(fatLossTargets.carbs, 261);
+
+  // Female profile maintain
+  const femaleProfile: UserProfile = {
+    gender: 'female',
+    age: 30,
+    heightCm: 160,
+    weightKg: 55,
+    activityLevel: 'light', // 1.375
+    goal: 'maintain',
+  };
+  // Female BMR: 10 * 55 + 6.25 * 160 - 5 * 30 - 161 = 550 + 1000 - 150 - 161 = 1239
+  assert.equal(calculateBmr(femaleProfile), 1239);
+  // TDEE: 1239 * 1.375 = 1703.625 -> 1704
+  assert.equal(calculateTdee(femaleProfile), 1704);
+  const maintainTargets = calculateNutritionTargets(femaleProfile);
+  assert.equal(maintainTargets.calories, 1704);
+  // Protein: 55 * 1.6 = 88
+  assert.equal(maintainTargets.protein, 88);
+
+  // Muscle gain profile
+  const gainProfile: UserProfile = {
+    ...maleProfile,
+    goal: 'muscle_gain',
+  };
+  const gainTargets = calculateNutritionTargets(gainProfile);
+  // Calories: 2595 + 300 = 2895
+  assert.equal(gainTargets.calories, 2895);
+  // Protein: 70 * 1.8 = 126
+  assert.equal(gainTargets.protein, 126);
+
+  // Enforces 1200 kcal floor on fat loss
+  const lowTdeeProfile: UserProfile = {
+    gender: 'female',
+    age: 60,
+    heightCm: 145,
+    weightKg: 40,
+    activityLevel: 'sedentary',
+    goal: 'fat_loss',
+  };
+  const lowTargets = calculateNutritionTargets(lowTdeeProfile);
+  assert.ok(lowTargets.calories >= 1200);
+});
+
+test('stores and validates user profile in backup while rejecting invalid fields', () => {
+  const profile: UserProfile = {
+    gender: 'male',
+    age: 26,
+    heightCm: 172,
+    weightKg: 68,
+    activityLevel: 'moderate',
+    goal: 'fat_loss',
+  };
+  const valid = validateBackup({ ...backup(), profile });
+  assert.deepEqual(valid.profile, profile);
+
+  // Rejects invalid profile values
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, gender: 'other' } }), /male or female/);
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, age: 5 } }), /at least 10/);
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, heightCm: 30 } }), /at least 50/);
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, weightKg: 10 } }), /at least 20/);
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, activityLevel: 'invalid' } }), /invalid/);
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, goal: 'invalid' } }), /invalid/);
+  assert.throws(() => validateBackup({ ...backup(), profile: { ...profile, extraField: true } }), /unsupported/);
 });
