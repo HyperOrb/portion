@@ -1,5 +1,7 @@
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash';
+export const DEFAULT_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
 export const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+export const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL?.trim() || DEFAULT_FALLBACK_MODEL;
 
 export const isThinkingModel = (model) => /^gemini-3\./.test(model);
 
@@ -126,20 +128,26 @@ export function validateMeal(value, description = '', model = GEMINI_MODEL) {
   }
 }
 
-export async function parseMeal(description, { model = process.env.GEMINI_MODEL?.trim() || GEMINI_MODEL, apiKey = process.env.GEMINI_API_KEY, fetchImpl = fetch, timeoutMs = 25000 } = {}) {
+export async function parseMeal(description, {
+  model = process.env.GEMINI_MODEL?.trim() || GEMINI_MODEL,
+  fallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim() || (model !== DEFAULT_FALLBACK_MODEL ? DEFAULT_FALLBACK_MODEL : null),
+  apiKey = process.env.GEMINI_API_KEY,
+  fetchImpl = fetch,
+  timeoutMs = 25000,
+} = {}) {
   if (!apiKey?.trim()) throw new ApiError(503, 'GEMINI_NOT_CONFIGURED', 'Set GEMINI_API_KEY in the server .env file using a Free Tier Google AI Studio project, then restart the server. Never paste your key into this app or chat.');
-  let response;
-  try {
+
+  const callModel = async (targetModel) => {
     const generationConfig = {
       responseMimeType: 'application/json',
       responseJsonSchema: mealSchema,
       maxOutputTokens: 8192,
     };
-    if (isThinkingModel(model)) {
+    if (isThinkingModel(targetModel)) {
       // Native REST uses the uppercase ThinkingLevel enum.
       generationConfig.thinkingConfig = { thinkingLevel: 'LOW' };
     }
-    response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    return fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
@@ -149,6 +157,16 @@ export async function parseMeal(description, { model = process.env.GEMINI_MODEL?
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
+  };
+
+  let activeModel = model;
+  let response;
+  try {
+    response = await callModel(activeModel);
+    if (!response.ok && (response.status === 429 || response.status === 503 || response.status === 404) && fallbackModel && fallbackModel !== activeModel) {
+      activeModel = fallbackModel;
+      response = await callModel(activeModel);
+    }
     if (!response.ok) {
       // Provider error bodies can echo submitted text: never forward or log them.
       if (response.status === 400) throw new ApiError(502, 'GEMINI_REQUEST_REJECTED', 'Google rejected the parsing request or project configuration. Check the server’s Gemini setup, or enter foods manually.');
@@ -158,7 +176,7 @@ export async function parseMeal(description, { model = process.env.GEMINI_MODEL?
         throw new ApiError(429, 'GEMINI_QUOTA', 'Google Gemini quota or rate limit reached. Wait and retry, or check your project limits in AI Studio. The app will never switch to a paid service.', Number.isFinite(retry) && retry > 0 ? Math.min(retry, 86400) : 60);
       }
       if ([401, 403].includes(response.status)) throw new ApiError(503, 'GEMINI_KEY_REJECTED', 'Google rejected the API key or project access. Check the server key, supported region, and that the project has Free Tier access in AI Studio.');
-      if (response.status === 404) throw new ApiError(503, 'GEMINI_MODEL_UNAVAILABLE', `${model} is unavailable for this project. Check current Google model access; the app will not change model or enable billing automatically.`);
+      if (response.status === 404) throw new ApiError(503, 'GEMINI_MODEL_UNAVAILABLE', `${activeModel} is unavailable for this project. Check current Google model access; the app will not change model or enable billing automatically.`);
       if (response.status === 503) throw new ApiError(503, 'GEMINI_BUSY', 'Google Gemini is temporarily overloaded or unavailable. Your meal has not been saved. Wait a minute, then retry, or enter foods manually.', 60);
       throw new ApiError(502, 'GEMINI_UNAVAILABLE', 'Google Gemini could not parse this meal right now. Try again later or enter foods manually.');
     }
@@ -167,7 +185,7 @@ export async function parseMeal(description, { model = process.env.GEMINI_MODEL?
     if (!candidate || (candidate.finishReason && candidate.finishReason !== 'STOP')) throw new ApiError(502, 'GEMINI_INCOMPLETE', 'Gemini did not complete the meal estimate. Try a shorter description or enter foods manually.');
     const resultText = candidate.content?.parts?.filter((part) => !part.thought && typeof part.text === 'string').map((part) => part.text).join('');
     if (!resultText || resultText.length > 50000) throw new Error('Invalid response');
-    return validateMeal(JSON.parse(resultText), description, model);
+    return validateMeal(JSON.parse(resultText), description, activeModel);
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (error.name === 'TimeoutError' || error.name === 'AbortError') throw new ApiError(504, 'GEMINI_TIMEOUT', 'Google Gemini took too long. Retry later or enter foods manually.');
