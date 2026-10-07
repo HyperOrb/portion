@@ -207,6 +207,7 @@ export default function LandingPage({
             <a href="#features">Features</a>
             <a href="#demo">Live Demo</a>
             <a href="#how-it-works">How It Works</a>
+            <a href="#pricing">Pricing</a>
             <a href="#academic">Research</a>
           </nav>
 
@@ -242,7 +243,7 @@ export default function LandingPage({
 
           <div className="landing-cta-group">
             <button className="button primary cta-large shine-btn shadow-pulse" onClick={onSignUp}>
-              Start Tracking Free <Icon name="arrow" size={18} />
+              Start Free in Beta <Icon name="arrow" size={18} />
             </button>
             <a href="#demo" className="button secondary cta-large hover-lift">
               <Icon name="spark" size={16} /> Try Interactive Demo
@@ -278,8 +279,8 @@ export default function LandingPage({
             <div className="floating-sticker sticker-bottom-right">
               <span className="sticker-emoji">🎯</span>
               <div>
-                <strong>100% Free</strong>
-                <small>No ad paywalls</small>
+                <strong>Early Access</strong>
+                <small>Free during Beta</small>
               </div>
             </div>
           </div>
@@ -288,7 +289,7 @@ export default function LandingPage({
             <span><Icon name="check" size={15} /> USDA FoodData Central Verified</span>
             <span><Icon name="check" size={15} /> Open Food Facts Package Barcode</span>
             <span><Icon name="check" size={15} /> Mifflin-St Jeor TDEE Calculator</span>
-            <span><Icon name="check" size={15} /> 100% Free for Personal Use</span>
+            <span><Icon name="check" size={15} /> Free During Public Beta</span>
           </div>
         </div>
       </section>
@@ -596,6 +597,74 @@ export default function LandingPage({
         </div>
       </section>
 
+      {/* Transparent Pricing & Early Access Plans */}
+      <section className="landing-section pricing-section" id="pricing">
+        <div className="section-head-center">
+          <span className="eyebrow">Early Adopter Plans</span>
+          <h2>Simple, Transparent Pricing</h2>
+          <p className="muted">
+            Portion is 100% free to use right now during our public beta. Early adopters get full access to all features and lock in grandfathered rates when Pro launches.
+          </p>
+        </div>
+
+        <div className="pricing-grid">
+          {/* Card 1: Public Beta */}
+          <div className="pricing-card beta-card hover-lift">
+            <div className="pricing-header">
+              <span className="pricing-badge green">Free Now</span>
+              <h3>Public Beta</h3>
+              <p className="small muted">Everything you need to effortlessly log your everyday meals.</p>
+              <div className="pricing-amount">
+                <span className="price-val">$0</span>
+                <span className="price-period">/ month (Free to use now)</span>
+              </div>
+            </div>
+
+            <ul className="pricing-features">
+              <li><Icon name="check" size={16} /> Natural language meal & drink logging</li>
+              <li><Icon name="check" size={16} /> Indonesian & regional dish intelligence</li>
+              <li><Icon name="check" size={16} /> Verified USDA & Open Food Facts data</li>
+              <li><Icon name="check" size={16} /> Mifflin-St Jeor BMR & TDEE macro targets</li>
+              <li><Icon name="check" size={16} /> Save Usual meals for 1-tap re-logging</li>
+              <li><Icon name="check" size={16} /> Private cloud sync with Supabase RLS</li>
+            </ul>
+
+            <button className="button primary cta-large shine-btn full-width" onClick={onSignUp}>
+              Start Free in Beta <Icon name="arrow" size={16} />
+            </button>
+            <span className="pricing-footnote">No credit card or payment required.</span>
+          </div>
+
+          {/* Card 2: Portion Pro (Launching Soon) */}
+          <div className="pricing-card pro-card hover-lift featured-card">
+            <div className="pro-pill-featured">Free Access During Beta</div>
+            <div className="pricing-header">
+              <span className="pricing-badge pro">Future Pro Tier</span>
+              <h3>Portion Pro</h3>
+              <p className="small muted">For serious health goals, athletes, and nutrition power users.</p>
+              <div className="pricing-amount">
+                <span className="price-val">$4.99</span>
+                <span className="price-period">/ month (~Rp 49.000/bln)</span>
+              </div>
+            </div>
+
+            <ul className="pricing-features">
+              <li><Icon name="check" size={16} /> <strong>Everything in Public Beta, plus:</strong></li>
+              <li><Icon name="check" size={16} /> Unlimited high-volume Claude meal breakdowns</li>
+              <li><Icon name="check" size={16} /> Micronutrient tracking (sodium, sugar, dietary fiber)</li>
+              <li><Icon name="check" size={16} /> PDF nutrition export for doctors & trainers</li>
+              <li><Icon name="check" size={16} /> Batch recipe & meal-prep portion calculator</li>
+              <li><Icon name="check" size={16} /> Priority response speed & early feature access</li>
+            </ul>
+
+            <button className="button secondary cta-large full-width hover-lift pro-btn" onClick={onSignUp}>
+              Join Pro Beta (100% Free Now) <Icon name="spark" size={16} />
+            </button>
+            <span className="pricing-footnote">Free during Early Access. Grandfathered rates for early adopters.</span>
+          </div>
+        </div>
+      </section>
+
       {/* Academic Backing & Research Section */}
       <section className="landing-section academic-section" id="academic">
         <div className="academic-card hover-lift">
@@ -646,6 +715,7 @@ export default function LandingPage({
               <a href="#features">Features</a>
               <a href="#demo">Live Demo</a>
               <a href="#how-it-works">How It Works</a>
+              <a href="#pricing">Pricing</a>
               <button className="text-button small" onClick={onSignIn}>Sign In</button>
             </div>
             <div className="footer-col">

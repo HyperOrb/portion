@@ -1145,6 +1145,158 @@ label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:500;
   font-size: 12.5px;
 }
 
+/* Transparent Pricing Section */
+.pricing-section {
+  padding-top: 60px;
+  padding-bottom: 70px;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.pricing-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 38px 32px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.featured-card {
+  border: 2px solid var(--green);
+  box-shadow: 0 12px 40px rgba(37, 116, 87, 0.12);
+}
+
+.pro-pill-featured {
+  position: absolute;
+  top: -13px;
+  right: 24px;
+  background: var(--green);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  box-shadow: 0 4px 12px rgba(37, 116, 87, 0.3);
+}
+
+.pricing-header {
+  margin-bottom: 24px;
+}
+
+.pricing-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.pricing-badge.green {
+  background: #e8f5ec;
+  color: var(--green-dark);
+}
+
+.pricing-badge.pro {
+  background: #fdf3e7;
+  color: #b26a15;
+}
+
+.pricing-header h3 {
+  font-size: 22px;
+  margin: 0 0 6px;
+  color: #172a20;
+}
+
+.pricing-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.price-val {
+  font-size: 38px;
+  font-weight: 800;
+  color: #12241b;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.price-period {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pricing-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+  display: grid;
+  gap: 13px;
+  flex: 1;
+}
+
+.pricing-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #2b3f33;
+}
+
+.pricing-features li svg {
+  color: var(--green);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.pricing-footnote {
+  display: block;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+.pro-btn {
+  background: #eef6f1;
+  color: var(--green-dark);
+  border-color: #b9dfc6;
+  font-weight: 600;
+}
+
+.pro-btn:hover {
+  background: #e2f1e6;
+  border-color: var(--green);
+}
+
+@media (max-width: 768px) {
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
 /* Academic Backing */
 .academic-section {
   padding-top: 40px;
