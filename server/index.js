@@ -29,15 +29,21 @@ function assertOrigin(req, env) {
   const configuredHost = configuredOrigin ? new URL(configuredOrigin).hostname.replace(/^\[|\]$/g, '') : null;
   // Prevent arbitrary Host names from rebinding a local server through a foreign site.
   const deploymentHosts = env.VERCEL ? [env.VERCEL_URL, env.VERCEL_PROJECT_PRODUCTION_URL].filter(Boolean) : [];
-  if (host !== 'localhost' && !isIP(host) && host !== configuredHost && !deploymentHosts.includes(host)) throw new ApiError(403, 'UNTRUSTED_HOST', 'Use localhost, the computer’s local IP address, or the configured APP_ORIGIN.');
+  const isAllowedHost = host === 'localhost' ||
+    isIP(host) ||
+    host === configuredHost ||
+    (configuredHost && (host === `www.${configuredHost}` || configuredHost === `www.${host}`)) ||
+    deploymentHosts.includes(host);
+  if (!isAllowedHost) throw new ApiError(403, 'UNTRUSTED_HOST', 'Use localhost, the computer’s local IP address, or the configured APP_ORIGIN.');
   if (req.headers['sec-fetch-site'] === 'cross-site') throw new ApiError(403, 'CROSS_SITE_REQUEST', 'Open the app directly to make this request.');
   if (!req.headers.origin) return;
   let origin;
   try { origin = new URL(req.headers.origin); } catch { throw new ApiError(403, 'INVALID_ORIGIN', 'Open the app directly to make this request.'); }
   const direct = origin.origin === requestOrigin.origin;
   const configured = origin.origin === configuredOrigin;
+  const configuredWww = configuredOrigin ? (origin.hostname === `www.${configuredHost}` || configuredHost === `www.${origin.hostname}`) : false;
   const dev = env.NODE_ENV !== 'production' && origin.protocol === 'http:' && origin.hostname === requestOrigin.hostname && ['5173', '4173'].includes(origin.port);
-  if (!direct && !configured && !dev) throw new ApiError(403, 'CROSS_SITE_REQUEST', 'Requests must come from this app’s origin.');
+  if (!direct && !configured && !configuredWww && !dev) throw new ApiError(403, 'CROSS_SITE_REQUEST', 'Requests must come from this app’s origin.');
 }
 
 function readJson(req) {
