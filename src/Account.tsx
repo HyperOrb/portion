@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { cloudSetupError, supabase } from './cloud';
-import { Icon } from './ui';
+import { Icon, Modal } from './ui';
 import LandingPage from './LandingPage';
 
 function AccountShell({ children, onClose }: { children: ReactNode; onClose?: () => void }) {
   return (
-    <main className="account-page">
+    <div className="account-page">
       <div className="account-page-header">
         <a className="brand" href="/" aria-label="Portion Home">
           <span className="brand-mark"><Icon name="plate" size={25} /></span>
@@ -20,7 +20,7 @@ function AccountShell({ children, onClose }: { children: ReactNode; onClose?: ()
       </div>
       <section className="panel account-panel">{children}</section>
       <p className="small muted account-caption">Your everyday food journal. Calories, macros, and meals worth repeating.</p>
-    </main>
+    </div>
   );
 }
 
@@ -62,18 +62,18 @@ function SignIn({
 
       {/* Mode switch tabs */}
       {!recovery && (
-        <div className="auth-tab-switch" role="tablist">
+        <div className="auth-tab-switch" role="group" aria-label="Account action">
           <button
-            role="tab"
-            aria-selected={mode === 'signin'}
+            disabled={busy}
+            aria-pressed={mode === 'signin'}
             className={`auth-tab-btn ${mode === 'signin' ? 'active' : ''}`}
             onClick={() => { setMode('signin'); setError(''); setMessage(''); }}
           >
             Sign In
           </button>
           <button
-            role="tab"
-            aria-selected={mode === 'signup'}
+            disabled={busy}
+            aria-pressed={mode === 'signup'}
             className={`auth-tab-btn ${mode === 'signup' ? 'active' : ''}`}
             onClick={() => { setMode('signup'); setError(''); setMessage(''); }}
           >
@@ -186,7 +186,7 @@ function SignIn({
       )}
 
       <p className="small muted account-privacy">
-        Sign-in and confirmed journals are stored securely by Supabase. Your meals are completely isolated to your account.
+        Supabase manages your account and saved journal. Read how we handle your data in our <a href="/privacy.html">privacy notice</a> and <a href="/terms.html">beta terms</a>.
       </p>
     </AccountShell>
   );
@@ -245,14 +245,26 @@ export default function AccountGate({ children }: { children: (session: Session 
     };
   }, []);
 
-  // Keyboard accessibility: ESC closes auth modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAuthModal(null);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  const setupIssue = cloudSetupError || (server?.authRequired && (!supabase || !server.cloudConfigured)
+    ? 'Account access is temporarily unavailable. Please try again later or contact Portion.'
+    : supabase && server && !server.authRequired ? 'Account access needs a server configuration update.' : '');
+  const showLanding = new URLSearchParams(location.search).get('page') === 'home'
+    || ((!session && !recovery) && Boolean(supabase || server?.authRequired || setupIssue || error));
+
+  // Public product information remains usable even when account services are down.
+  if (showLanding) {
+    const accountIssue = setupIssue || error || (!server || authLoading ? 'Connecting to the account service…' : !supabase ? 'Accounts are unavailable in device-only local mode. Open the local journal to try manual logging.' : '');
+    return <LandingPage
+      onSignIn={() => setAuthModal('signin')}
+      onSignUp={() => setAuthModal('signup')}
+      authModal={authModal ? <Modal title={authModal === 'signup' ? 'Create your Portion account' : 'Sign in to Portion'} className="auth-dialog" onClose={() => setAuthModal(null)}>
+        {accountIssue ? <div><p role="status" className="notice">{accountIssue}</p><button className="button secondary" onClick={() => void checkServer()}>Retry connection</button>{!supabase && !server?.authRequired && <a className="button secondary" href="/">Open local journal</a>}</div> : <SignIn
+          key={authModal} recovery={false} initialMode={authModal}
+          onRecovered={() => setRecovery(false)} onExitRecovery={() => setRecovery(false)}
+        />}
+      </Modal> : null}
+    />;
+  }
 
   if (cloudSetupError || (server?.authRequired && (!supabase || !server.cloudConfigured)) || (supabase && server && !server.authRequired)) {
     return (
@@ -303,32 +315,6 @@ export default function AccountGate({ children }: { children: (session: Session 
       );
     }
 
-    return (
-      <LandingPage
-        onSignIn={() => setAuthModal('signin')}
-        onSignUp={() => setAuthModal('signup')}
-        authModal={
-          authModal ? (
-            <div
-              className="auth-modal-overlay"
-              role="dialog"
-              aria-modal="true"
-              onClick={e => { if (e.target === e.currentTarget) setAuthModal(null); }}
-            >
-              <div className="auth-modal-dialog">
-                <SignIn
-                  recovery={false}
-                  initialMode={authModal}
-                  onRecovered={() => setRecovery(false)}
-                  onExitRecovery={() => setRecovery(false)}
-                  onClose={() => setAuthModal(null)}
-                />
-              </div>
-            </div>
-          ) : null
-        }
-      />
-    );
   }
 
   return children(session);

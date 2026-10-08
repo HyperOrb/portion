@@ -1,744 +1,106 @@
-import { useState, useEffect, type ReactNode } from 'react';
-import { Icon, MacroLine, number } from './ui';
+import { useState, type ReactNode } from 'react';
+import { Icon } from './ui';
+import { sampleMeals, sampleTotals } from './demo';
 
-type Preset = {
-  label: string;
-  tag: string;
-  query: string;
-  items: { name: string; qty: string; cals: number; p: number; c: number; f: number }[];
-};
-
-type AddOn = {
-  id: string;
-  name: string;
-  emoji: string;
-  cals: number;
-  p: number;
-  c: number;
-  f: number;
-};
-
-const PRESETS: Preset[] = [
-  {
-    label: '🍜 Mie Ayam + Telur',
-    tag: 'Street Food',
-    query: '1 mangkuk mie ayam jamur dan 1 butir telur rebus',
-    items: [
-      { name: 'Mie ayam jamur (1 porsi mangkuk)', qty: '350 g', cals: 420, p: 18, c: 54, f: 14 },
-      { name: 'Telur ayam rebus matang', qty: '55 g (1 butir)', cals: 78, p: 6.3, c: 0.6, f: 5.3 },
-    ],
-  },
-  {
-    label: '🍗 Nasi Padang Gulai',
-    tag: 'Regional Dish',
-    query: '1 porsi nasi putih, 1 potong ayam gulai, dan daun singkong rebus',
-    items: [
-      { name: 'Nasi putih pulen', qty: '150 g (1 centong)', cals: 195, p: 3.8, c: 43.2, f: 0.4 },
-      { name: 'Ayam gulai bumbu padang', qty: '120 g (1 potong paha)', cals: 260, p: 21, c: 4.5, f: 17.5 },
-      { name: 'Daun singkong rebus', qty: '60 g', cals: 35, p: 2.2, c: 5.8, f: 0.6 },
-    ],
-  },
-  {
-    label: '🍢 Sate Ayam + Lontong',
-    tag: 'Indonesian Staple',
-    query: '10 tusuk sate ayam bumbu kacang dan 1 lontong potong',
-    items: [
-      { name: 'Sate ayam dada panggang', qty: '150 g (10 tusuk)', cals: 280, p: 32, c: 2, f: 15 },
-      { name: 'Bumbu kacang sate kental', qty: '50 g (2.5 sdm)', cals: 165, p: 6.5, c: 9.5, f: 12 },
-      { name: 'Lontong potong', qty: '100 g', cals: 140, p: 2.8, c: 31, f: 0.3 },
-    ],
-  },
-  {
-    label: '☕ Latte & Avocado Toast',
-    tag: 'Cafe Breakfast',
-    query: '1 gelas caffe latte oat milk dan 2 lembar roti gandum alpukat telur',
-    items: [
-      { name: 'Caffe latte with oat milk (unsweetened)', qty: '240 mL (1 glass)', cals: 130, p: 3.5, c: 16, f: 5.5 },
-      { name: 'Roti gandum dengan alpukat lumat', qty: '90 g', cals: 185, p: 5.5, c: 26, f: 7.8 },
-      { name: 'Telur ceplok mata sapi', qty: '50 g (1 butir)', cals: 92, p: 6.2, c: 0.4, f: 7.1 },
-    ],
-  },
-  {
-    label: '🥗 Gado-Gado Lontong',
-    tag: 'Traditional Salad',
-    query: '1 piring gado-gado lontong saus kacang dan 1 butir telur',
-    items: [
-      { name: 'Sayuran rebus & tauge', qty: '120 g', cals: 45, p: 2.5, c: 8, f: 0.5 },
-      { name: 'Lontong / ketupat potong', qty: '100 g', cals: 140, p: 2.8, c: 31, f: 0.3 },
-      { name: 'Bumbu kacang gado-gado', qty: '60 g (3 sdm)', cals: 190, p: 7.5, c: 11, f: 13.8 },
-      { name: 'Telur rebus separuh', qty: '55 g (1 butir)', cals: 78, p: 6.3, c: 0.6, f: 5.3 },
-    ],
-  },
-  {
-    label: '🍣 Salmon Teriyaki Bowl',
-    tag: 'Healthy Protein',
-    query: '1 mangkuk nasi merah, 1 potong salmon panggang 150g, dan brokoli kukus',
-    items: [
-      { name: 'Nasi merah pulen', qty: '140 g (1 centong)', cals: 155, p: 3.5, c: 32, f: 1.2 },
-      { name: 'Fillet salmon panggang teriyaki', qty: '150 g', cals: 310, p: 34, c: 5, f: 17 },
-      { name: 'Brokoli kukus', qty: '100 g', cals: 35, p: 2.8, c: 7, f: 0.4 },
-    ],
-  },
+const format = (value: number) => new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(value);
+const features = [
+  { icon: 'spark', title: 'Write the way you eat.', text: 'Describe your meal in Indonesian, English, or both. AI suggests ingredients, portions, and estimates for you to review.' },
+  { icon: 'search', title: 'Know where the numbers come from.', text: 'See AI estimates, USDA records, Open Food Facts products, and your own package labels as distinct sources.' },
+  { icon: 'settings', title: 'Make the portion yours.', text: 'Adjust edible weight, drink volume, preparation, and raw or cooked state before saving. Grams and milliliters stay separate.' },
+  { icon: 'journal', title: 'Keep a daily picture.', text: 'Track calories, protein, carbs, and fat against optional, editable targets. Revisit your meals by date.' },
+  { icon: 'bookmark', title: 'Save the meals you repeat.', text: 'Keep usual meals and package labels for next time. Edit a saved meal before logging it again.' },
+  { icon: 'lock', title: 'Take your journal with you.', text: 'Use an account for cloud sync, or device storage in local mode. Export a backup of your structured journal.' },
 ];
 
-const ADD_ONS: AddOn[] = [
-  { id: 'sambal', name: 'Sambal Terasi', emoji: '🌶️', cals: 20, p: 0.5, c: 2.2, f: 1.0 },
-  { id: 'kerupuk', name: 'Kerupuk Kaleng', emoji: '🍘', cals: 65, p: 0.8, c: 8.5, f: 3.2 },
-  { id: 'telur', name: 'Telur Dadar', emoji: '🍳', cals: 95, p: 6.5, c: 0.8, f: 7.2 },
-  { id: 'esteh', name: 'Es Teh Manis', emoji: '🧊', cals: 85, p: 0.1, c: 21.0, f: 0.0 },
-];
-
-function useAnimatedNumber(target: number, durationMs = 320): number {
-  const [current, setCurrent] = useState(target);
-
-  useEffect(() => {
-    let startTimestamp: number | null = null;
-    const startVal = current;
-    const diff = target - startVal;
-
-    if (diff === 0) return;
-
-    let frameId: number;
-    const step = (timestamp: number) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / durationMs, 1);
-      const ease = 1 - Math.pow(1 - progress, 3);
-      setCurrent(Math.round(startVal + diff * ease));
-
-      if (progress < 1) {
-        frameId = requestAnimationFrame(step);
-      }
-    };
-
-    frameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frameId);
-  }, [target]);
-
-  return current;
+function Brand() {
+  return <a className="brand" href="/" aria-label="Portion home"><span className="brand-mark"><Icon name="plate" size={24} /></span>portion<span className="brand-period">.</span></a>;
 }
 
-export default function LandingPage({
-  onSignIn,
-  onSignUp,
-  authModal,
-}: {
-  onSignIn: () => void;
-  onSignUp: () => void;
-  authModal?: ReactNode;
+export default function LandingPage({ onSignIn, onSignUp, authModal }: {
+  onSignIn: () => void; onSignUp: () => void; authModal?: ReactNode;
 }) {
-  const [activePreset, setActivePreset] = useState<number>(0);
-  const [activeAddOns, setActiveAddOns] = useState<string[]>([]);
-  const [animKey, setAnimKey] = useState<number>(0);
+  const [selected, setSelected] = useState(0);
+  const meal = sampleMeals[selected];
+  const [quantities, setQuantities] = useState(sampleMeals[0].items.map(item => item.quantity));
+  const [reviewed, setReviewed] = useState(false);
+  const totals = sampleTotals(meal, quantities);
+  const valid = quantities.every(quantity => Number.isFinite(quantity) && quantity >= 1 && quantity <= 10000);
 
-  const currentPreset = PRESETS[activePreset];
+  function chooseMeal(index: number) {
+    setSelected(index); setQuantities(sampleMeals[index].items.map(item => item.quantity)); setReviewed(false);
+  }
 
-  // Combine preset items and selected add-ons
-  const selectedAddOnItems = ADD_ONS.filter(a => activeAddOns.includes(a.id)).map(a => ({
-    name: `${a.emoji} ${a.name} (Extra)`,
-    qty: '1 porsi tambahan',
-    cals: a.cals,
-    p: a.p,
-    c: a.c,
-    f: a.f,
-  }));
+  return <div className="landing-page">
+    <a className="skip-link" href="#main-content">Skip to content</a>
+    <header className="landing-header">
+      <div className="landing-container landing-header-inner">
+        <Brand />
+        <nav aria-label="Product navigation" className="landing-nav">
+          <a href="#demo">Try the demo</a><a href="#how-it-works">How it works</a><a href="#features">Features</a><a href="#about">About</a>
+        </nav>
+        <div className="landing-actions"><button className="text-button" onClick={onSignIn}>Sign in</button><button className="button primary" onClick={onSignUp}>Get started <Icon name="arrow" size={16} /></button></div>
+      </div>
+    </header>
 
-  const allItems = [...currentPreset.items, ...selectedAddOnItems];
-
-  const rawTotalCals = allItems.reduce((sum, item) => sum + item.cals, 0);
-  const rawTotalP = allItems.reduce((sum, item) => sum + item.p, 0);
-  const rawTotalC = allItems.reduce((sum, item) => sum + item.c, 0);
-  const rawTotalF = allItems.reduce((sum, item) => sum + item.f, 0);
-
-  // Animated numbers
-  const animatedCals = useAnimatedNumber(rawTotalCals);
-  const animatedP = useAnimatedNumber(Math.round(rawTotalP));
-  const animatedC = useAnimatedNumber(Math.round(rawTotalC));
-  const animatedF = useAnimatedNumber(Math.round(rawTotalF));
-
-  // Macro percentages for distribution bar
-  const totalGrams = rawTotalP + rawTotalC + rawTotalF || 1;
-  const pPct = Math.round((rawTotalP / totalGrams) * 100);
-  const cPct = Math.round((rawTotalC / totalGrams) * 100);
-  const fPct = Math.max(0, 100 - pPct - cPct);
-
-  // Daily budget reference (2,000 kcal standard target)
-  const DAILY_BUDGET = 2000;
-  const budgetPct = Math.min(100, Math.round((rawTotalCals / DAILY_BUDGET) * 100));
-  const remainingBudget = Math.max(0, DAILY_BUDGET - rawTotalCals);
-
-  const handleSelectPreset = (idx: number) => {
-    setActivePreset(idx);
-    setActiveAddOns([]);
-    setAnimKey(prev => prev + 1);
-  };
-
-  const handleSurpriseMe = () => {
-    let nextIdx = Math.floor(Math.random() * PRESETS.length);
-    if (nextIdx === activePreset) {
-      nextIdx = (nextIdx + 1) % PRESETS.length;
-    }
-    handleSelectPreset(nextIdx);
-  };
-
-  const toggleAddOn = (id: string) => {
-    setActiveAddOns(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-    setAnimKey(prev => prev + 1);
-  };
-
-  return (
-    <div className="landing-page">
-      {/* Background Ambient Glow Elements */}
-      <div className="ambient-blob blob-1" aria-hidden="true" />
-      <div className="ambient-blob blob-2" aria-hidden="true" />
-
-      {/* Navigation Header */}
-      <header className="landing-header">
-        <div className="landing-header-inner">
-          <a className="brand" href="/" aria-label="Portion Home">
-            <span className="brand-mark">
-              <Icon name="plate" size={24} />
-            </span>
-            portion<span className="brand-period">.</span>
-          </a>
-
-          <nav className="landing-nav" aria-label="Main Navigation">
-            <a href="#features">Features</a>
-            <a href="#demo">Live Demo</a>
-            <a href="#how-it-works">How It Works</a>
-            <a href="#pricing">Pricing</a>
-            <a href="#academic">Research</a>
-          </nav>
-
-          <div className="landing-header-actions">
-            <button className="button secondary small-btn hover-lift" onClick={onSignIn}>
-              Sign In
-            </button>
-            <button className="button primary small-btn shine-btn" onClick={onSignUp}>
-              Get Started Free <Icon name="arrow" size={14} />
-            </button>
-          </div>
+    <main id="main-content">
+      <section className="landing-container landing-hero" aria-labelledby="hero-title">
+        <div className="hero-copy">
+          <span className="landing-kicker"><span className="status-dot" /> An everyday food journal · Early beta</span>
+          <h1 id="hero-title">Your meals,<br />in your words.</h1>
+          <p className="hero-description">From mie ayam to your morning latte. Describe what you ate, review the portions and nutrition, and keep your day in view.</p>
+          <div className="hero-cta"><button className="button primary" onClick={onSignUp}>Start your journal <Icon name="arrow" size={18} /></button><a className="button secondary" href="#demo">Explore a sample</a></div>
+          <p className="hero-caption">Indonesian & English · Editable portions · Visible sources</p>
         </div>
-      </header>
+        <div className="hero-preview" aria-label="Illustrative product workflow">
+          <div className="preview-top"><span><Icon name="journal" size={17} /> A meal, ready for review</span><span className="sample-badge">Sample</span></div>
+          <div className="preview-description"><span className="preview-label">You describe</span><p>“1 mangkuk mie ayam jamur dan 1 butir telur rebus”</p></div>
+          <div className="preview-flow"><span className="preview-label">You review</span><div><Icon name="check" size={16} /> Ingredients & preparation</div><div><Icon name="check" size={16} /> Portion assumptions & nutrition sources</div><div><Icon name="check" size={16} /> Calories, protein, carbs & fat</div></div>
+          <a href="#demo" className="preview-next">Make the portion yours <Icon name="arrow" size={17} /></a>
+          <p className="preview-footnote">Illustrative walkthrough. Your actual meal needs its own review.</p>
+        </div>
+      </section>
+      <div className="source-strip"><div className="landing-container"><span>Nutrition sources you can inspect</span><a href="https://fdc.nal.usda.gov/" target="_blank" rel="noreferrer">USDA FoodData Central <Icon name="arrow" size={14} /></a><a href="https://world.openfoodfacts.org/" target="_blank" rel="noreferrer">Open Food Facts <Icon name="arrow" size={14} /></a><span>Your package labels</span></div></div>
 
-      {/* Hero Section */}
-      <section className="landing-hero" id="hero">
-        <div className="landing-hero-content">
-          <div className="landing-pill pulse-badge">
-            <span className="sparkle-icon"><Icon name="spark" size={14} /></span>
-            <span>AI-Powered Food Journal · Built for Real Everyday Meals</span>
+      <section id="demo" className="landing-container landing-section demo-section" aria-labelledby="demo-title">
+        <div className="section-intro"><span className="eyebrow">A little less guesswork</span><h2 id="demo-title">Try the review.<br />Keep control of the details.</h2><p>Choose a sample meal and change a portion. See how the totals follow your edits, just as they do in the journal.</p></div>
+        <div className="demo-disclosure"><Icon name="info" size={18} /><p><strong>Illustrative sample data.</strong> This walkthrough uses fixed example recipes and values. It does not call AI, search a nutrition database, or save to an account. These numbers are not nutritional advice for your meal.</p></div>
+        <div className="sample-picker" role="group" aria-label="Choose a sample meal">{sampleMeals.map((preset, index) => <button key={preset.title} type="button" aria-pressed={selected === index} className={`sample-choice ${selected === index ? 'selected' : ''}`} onClick={() => chooseMeal(index)}>{preset.title}</button>)}</div>
+        <div className="walkthrough">
+          <div className="walkthrough-editor">
+            <div className="walkthrough-title"><span className="step-index">01</span><h3>Review the meal</h3><span className="sample-badge">Sample values</span></div>
+            <div className="sample-input"><span className="preview-label">Meal description</span><p>{meal.description}</p></div>
+            {meal.items.map((item, index) => <div className="sample-ingredient" key={`${selected}-${index}`}>
+              <div className="sample-ingredient-heading"><strong>{item.name}</strong><span className="sample-source">Illustrative sample</span></div>
+              <div className="sample-ingredient-body"><p>{item.assumption}</p><label htmlFor={`sample-portion-${index}`}>Portion ({item.unit === 'ml' ? 'mL' : 'g'})<input id={`sample-portion-${index}`} type="number" inputMode="decimal" min="1" max="10000" step="any" value={quantities[index] || ''} onChange={event => { const quantity = Number(event.target.value); setQuantities(current => current.map((value, i) => i === index ? quantity : value)); setReviewed(false); }} /></label></div>
+            </div>)}
+            {!valid && <p role="alert" className="error-message">Enter each portion between 1 and 10,000 {meal.items[0].unit === 'ml' ? 'mL' : 'g'}.</p>}
           </div>
-
-          <h1 className="landing-title">
-            Track calories and macros <br className="hero-break" />
-            <span className="landing-highlight animate-gradient">in plain words.</span>
-          </h1>
-
-          <p className="landing-subtitle">
-            No more searching massive, frustrating databases for every single ingredient.
-            Describe what you ate in everyday Indonesian or English—Portion breaks down ingredients,
-            estimates portion weights, and calculates verified macros in seconds.
-          </p>
-
-          <div className="landing-cta-group">
-            <button className="button primary cta-large shine-btn shadow-pulse" onClick={onSignUp}>
-              Start Free in Beta <Icon name="arrow" size={18} />
-            </button>
-            <a href="#demo" className="button secondary cta-large hover-lift">
-              <Icon name="spark" size={16} /> Try Interactive Demo
-            </a>
-          </div>
-
-          {/* Floating Delights / Floating Badges with Fun Food Stickers */}
-          <div className="floating-stickers-container" aria-hidden="true">
-            <div className="floating-sticker sticker-left">
-              <span className="sticker-emoji">🥑</span>
-              <div>
-                <strong>+24g Protein</strong>
-                <small>Logged in 1 tap</small>
-              </div>
-            </div>
-
-            <div className="floating-sticker sticker-right">
-              <span className="sticker-emoji">⚡</span>
-              <div>
-                <strong>Parsed in 0.4s</strong>
-                <small>Natural Indonesian</small>
-              </div>
-            </div>
-
-            <div className="floating-sticker sticker-bottom-left">
-              <span className="sticker-emoji">🍜</span>
-              <div>
-                <strong>Mie Ayam & Bakso</strong>
-                <small>Auto-weighed</small>
-              </div>
-            </div>
-
-            <div className="floating-sticker sticker-bottom-right">
-              <span className="sticker-emoji">🎯</span>
-              <div>
-                <strong>Early Access</strong>
-                <small>Free during Beta</small>
-              </div>
-            </div>
-          </div>
-
-          <div className="landing-trust-bar">
-            <span><Icon name="check" size={15} /> USDA FoodData Central Verified</span>
-            <span><Icon name="check" size={15} /> Open Food Facts Package Barcode</span>
-            <span><Icon name="check" size={15} /> Mifflin-St Jeor TDEE Calculator</span>
-            <span><Icon name="check" size={15} /> Free During Public Beta</span>
-          </div>
+          <aside className="sample-summary" aria-label="Sample meal totals">
+            <div className="walkthrough-title"><span className="step-index">02</span><h3>Your sample totals</h3></div>
+            <div className="sample-energy"><span className="preview-label">Meal energy · sample</span><div>{valid ? format(totals.calories) : '—'} <span>kcal</span></div></div>
+            <dl className="sample-macros">{(['protein', 'carbs', 'fat'] as const).map(key => <div key={key}><dt><i className={`dot ${key}`} />{key === 'carbs' ? 'Carbs' : key === 'protein' ? 'Protein' : 'Fat'}</dt><dd>{valid ? format(totals[key]) : '—'} g</dd></div>)}</dl>
+            <div className="sample-review-note"><Icon name="info" size={17} /><p>In your journal, check each source and assumption before saving. Drink volumes stay in mL; food weights stay in g.</p></div>
+            <button className="button primary full" disabled={!valid} onClick={() => setReviewed(true)}><Icon name="check" size={17} />Finish sample review</button>
+            <div className="sample-completion" role="status">{reviewed ? <><strong>Sample review complete.</strong><span>Nothing was saved. Create an account to log your own meal.</span><button className="text-button" onClick={onSignUp}>Start a real journal <Icon name="arrow" size={15} /></button></> : <span>No account needed. Nothing is stored.</span>}</div>
+          </aside>
         </div>
       </section>
 
-      {/* Interactive Demo Section */}
-      <section className="landing-section demo-section" id="demo">
-        <div className="section-head-center">
-          <span className="eyebrow">Interactive Food Sandbox</span>
-          <h2>See How Portion Understands Your Food</h2>
-          <p className="muted">
-            Click any meal below or add fun extras to watch Portion calculate calories, portion assumptions, and macro balance in real time!
-          </p>
-        </div>
-
-        <div className="demo-card-container interactive-glow">
-          {/* Preset Buttons + Surprise Me */}
-          <div className="preset-bar-header">
-            <div className="preset-tabs" role="tablist" aria-label="Sample Meals">
-              {PRESETS.map((p, idx) => (
-                <button
-                  key={p.label}
-                  role="tab"
-                  aria-selected={activePreset === idx}
-                  className={`preset-tab ${activePreset === idx ? 'active' : ''}`}
-                  onClick={() => handleSelectPreset(idx)}
-                >
-                  <span>{p.label}</span>
-                  <span className="preset-subtag">{p.tag}</span>
-                </button>
-              ))}
-            </div>
-
-            <button
-              className="surprise-button hover-lift"
-              onClick={handleSurpriseMe}
-              title="Pick a random meal!"
-              type="button"
-            >
-              🎲 Surprise Me!
-            </button>
-          </div>
-
-          {/* Interactive Extras / Add-on Condiments */}
-          <div className="addons-container">
-            <span className="addons-title">
-              <span className="sparkle-icon">✨</span> Add playful extras:
-            </span>
-            <div className="addons-list">
-              {ADD_ONS.map(addon => {
-                const isSelected = activeAddOns.includes(addon.id);
-                return (
-                  <button
-                    key={addon.id}
-                    type="button"
-                    className={`addon-pill ${isSelected ? 'selected' : ''}`}
-                    onClick={() => toggleAddOn(addon.id)}
-                  >
-                    <span>{addon.emoji}</span>
-                    <span>{addon.name}</span>
-                    <span className="addon-cals">+{addon.cals} kcal</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Simulated Natural Language Input */}
-          <div className="demo-input-box" key={`input-${animKey}`}>
-            <span className="demo-input-icon spin-on-change"><Icon name="spark" size={18} /></span>
-            <div className="demo-input-text">
-              {currentPreset.query}
-              {activeAddOns.length > 0 && (
-                <span className="demo-addons-suffix">
-                  {' '}
-                  + {ADD_ONS.filter(a => activeAddOns.includes(a.id)).map(a => a.name).join(', ')}
-                </span>
-              )}
-            </div>
-            <span className="demo-tag pulse-subtle">Interpreted Live</span>
-          </div>
-
-          {/* Breakdown Result */}
-          <div className="demo-result-panel" key={`panel-${animKey}`}>
-            <div className="demo-result-header">
-              <div className="demo-cals-block">
-                <span className="small muted">Total Energy Breakdown</span>
-                <div className="demo-calorie-big bounce-text">
-                  {animatedCals} <span>kcal</span>
-                </div>
-              </div>
-
-              <div className="demo-macro-pills">
-                <div className="demo-macro-pill protein pill-hover" title="Protein: 4 kcal per gram">
-                  <i className="dot protein" />
-                  <div>
-                    <b>{animatedP}g</b> <small>Protein ({pPct}%)</small>
-                  </div>
-                </div>
-                <div className="demo-macro-pill carbs pill-hover" title="Carbohydrates: 4 kcal per gram">
-                  <i className="dot carbs" />
-                  <div>
-                    <b>{animatedC}g</b> <small>Carbs ({cPct}%)</small>
-                  </div>
-                </div>
-                <div className="demo-macro-pill fat pill-hover" title="Dietary Fat: 9 kcal per gram">
-                  <i className="dot fat" />
-                  <div>
-                    <b>{animatedF}g</b> <small>Fat ({fPct}%)</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Macro Distribution Stacked Bar */}
-            <div className="macro-bar-container" aria-label="Macro breakdown percentage">
-              <div className="macro-bar-track">
-                <div className="bar-segment protein" style={{ width: `${pPct}%` }} title={`Protein: ${pPct}%`} />
-                <div className="bar-segment carbs" style={{ width: `${cPct}%` }} title={`Carbs: ${cPct}%`} />
-                <div className="bar-segment fat" style={{ width: `${fPct}%` }} title={`Fat: ${fPct}%`} />
-              </div>
-              <div className="macro-bar-legend">
-                <span className="legend-item protein"><i className="dot protein" /> Protein {pPct}%</span>
-                <span className="legend-item carbs"><i className="dot carbs" /> Carbs {cPct}%</span>
-                <span className="legend-item fat"><i className="dot fat" /> Fat {fPct}%</span>
-              </div>
-            </div>
-
-            {/* Interactive Daily Target Budget Meter */}
-            <div className="budget-meter-box">
-              <div className="budget-meter-header">
-                <div className="budget-label">
-                  <span className="budget-icon">🎯</span>
-                  <strong>Daily Budget Fit</strong>
-                  <span className="budget-target-pill">{budgetPct}% of 2,000 kcal target</span>
-                </div>
-                <span className="budget-remaining">{remainingBudget} kcal left today</span>
-              </div>
-              <div className="budget-track">
-                <div
-                  className="budget-fill"
-                  style={{ width: `${budgetPct}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Identified Ingredients List */}
-            <div className="demo-items-list">
-              <div className="demo-items-header">
-                <span className="small muted-label">Identified Ingredients ({allItems.length})</span>
-                <span className="badge subtle">Verified Nutrition Data</span>
-              </div>
-              {allItems.map((item, i) => (
-                <div
-                  className="demo-item-row item-fade-in"
-                  key={`${item.name}-${i}`}
-                  style={{ animationDelay: `${i * 60}ms` }}
-                >
-                  <div className="demo-item-info">
-                    <strong>{item.name}</strong>
-                    <span className="small muted">{item.qty}</span>
-                  </div>
-                  <div className="demo-item-macros">
-                    <span className="demo-item-cal">{item.cals} kcal</span>
-                    <MacroLine totals={{ calories: item.cals, protein: item.p, carbs: item.c, fat: item.f }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="demo-footer-note">
-              <span className="check-badge"><Icon name="check" size={14} /></span>
-              <span>All assumptions are transparent and fully editable before saving to your journal.</span>
-            </div>
-          </div>
+      <section id="how-it-works" className="workflow-section">
+        <div className="landing-container landing-section"><div className="section-intro"><span className="eyebrow">Describe → review → save</span><h2>A routine that fits<br />the food you actually eat.</h2><p>A bowl, a plate, a glass. Start with the words you know, then check the details that matter.</p></div>
+          <ol className="workflow-steps"><li><span className="step-index">01</span><h3>Describe your meal</h3><p>Type foods and amounts in Indonesian or English. Include a brand, cooking method, or exact weight when you know it.</p></li><li><span className="step-index">02</span><h3>Review the assumptions</h3><p>AI proposes a portion and nutrition estimate. Adjust it, select a matching database record, or use your package label.</p></li><li><span className="step-index">03</span><h3>Save and see your day</h3><p>Keep the confirmed meal in your journal. View daily totals, edit past meals, and reuse your usuals.</p></li></ol>
         </div>
       </section>
 
-      {/* Why Traditional Apps Fail vs Portion */}
-      <section className="landing-section comparison-section">
-        <div className="section-head-center">
-          <span className="eyebrow">The Portion Difference</span>
-          <h2>Why 80% of People Quit Calorie Counting</h2>
-          <p className="muted">Logging food shouldn't feel like doing your annual taxes.</p>
-        </div>
+      <section id="features" className="landing-container landing-section" aria-labelledby="features-title"><div className="section-intro"><span className="eyebrow">Made for everyday use</span><h2 id="features-title">A focused journal.<br />Useful details.</h2></div><div className="landing-features">{features.map(feature => <article key={feature.title}><div className="landing-feature-icon"><Icon name={feature.icon} size={22} /></div><h3>{feature.title}</h3><p>{feature.text}</p></article>)}</div></section>
 
-        <div className="comparison-grid">
-          <div className="comp-card negative hover-lift">
-            <div className="comp-header">
-              <span className="comp-icon red-icon">✕</span>
-              <h3>Traditional Calorie Trackers</h3>
-            </div>
-            <ul>
-              <li>Forces you to weigh raw ingredients and search 20 ambiguous entries for one dish.</li>
-              <li>Fails completely on localized and mixed dishes (Nasi Padang, Soto, Mie Ayam).</li>
-              <li>Takes 5–10 minutes per entry, causing high friction and day-3 drop-offs.</li>
-              <li>Cluttered with ads, paywalls, and unverified duplicate entries.</li>
-            </ul>
-          </div>
+      <section id="sources" className="landing-container landing-section source-section" aria-labelledby="sources-title"><div className="section-intro"><span className="eyebrow">Numbers with context</span><h2 id="sources-title">Every source has a story.<br />You should be able to see it.</h2><p>Mixed dishes and local recipes vary. Portion keeps the source visible so you can decide what matches your meal.</p></div><div className="source-explanations"><article><span className="source-number">01 / AI estimate</span><h3>A useful starting point</h3><p>Gemini currently suggests nutrition and household portions from model knowledge. Estimates include assumptions and are not verified database or manufacturer values.</p></article><article><span className="source-number">02 / Database record</span><h3>A match you choose</h3><p>Search USDA for ingredients or Open Food Facts for packaged foods. Check preparation, exact product, and nutrition units; coverage and data quality vary.</p></article><article><span className="source-number">03 / Package label</span><h3>The label in your hands</h3><p>Enter the four nutrition values and serving size printed on your product. Portion preserves your entry as a package label for reuse.</p></article></div></section>
 
-          <div className="comp-card positive hover-lift">
-            <div className="positive-badge floating-badge">The Portion Way</div>
-            <div className="comp-header">
-              <span className="comp-icon green-icon">✓</span>
-              <h3>The Portion Experience</h3>
-            </div>
-            <ul>
-              <li>Type or speak naturally in plain words: bowls, glasses, spoons, or pieces.</li>
-              <li>Native intelligence for regional culinary vocabulary and Indonesian dishes.</li>
-              <li>Takes 5 seconds to log, review transparent assumptions, and save to your journal.</li>
-              <li>Clean, calm interface powered by verified USDA and Open Food Facts data.</li>
-            </ul>
-          </div>
-        </div>
-      </section>
+      <section id="about" className="about-section"><div className="landing-container about-layout"><div><span className="eyebrow">About Portion</span><h2>A small product for<br />a daily habit.</h2></div><div><p>Portion is an early-stage nutrition journal developed by Ryann Chandiari. The focus is practical food logging for people who eat Indonesian meals and want to understand their calories and macros.</p><p>The beta includes meal review, daily totals, usual meals, package labels, editable targets, and account sync. We are improving the product through testing and feedback.</p><p>Claude is being considered for meal interpretation and clearer handling of uncertainty. It is not the default provider, and no improvement over Gemini has been demonstrated yet.</p><div className="about-links"><a href="https://github.com/HyperOrb/portion" target="_blank" rel="noreferrer">Explore the source <Icon name="arrow" size={16} /></a><a href="mailto:contact@portion.my.id">Contact Portion <Icon name="arrow" size={16} /></a></div></div></div></section>
 
-      {/* Core Features Section */}
-      <section className="landing-section features-section" id="features">
-        <div className="section-head-center">
-          <span className="eyebrow">Built for Consistency</span>
-          <h2>Everything You Need to Reach Your Health Goals</h2>
-        </div>
-
-        <div className="features-grid">
-          <div className="feature-card interactive-card">
-            <div className="feature-icon icon-bounce"><Icon name="spark" size={24} /></div>
-            <h3>Natural Language Parsing</h3>
-            <p className="small muted">
-              Just write what’s on your plate. Our models estimate portions, calculate calories, and separate macro balances with zero friction.
-            </p>
-          </div>
-
-          <div className="feature-card interactive-card">
-            <div className="feature-icon icon-bounce"><Icon name="plate" size={24} /></div>
-            <h3>Regional & Local Dishes</h3>
-            <p className="small muted">
-              Designed specifically to handle Indonesian and Southeast Asian meal formats, from street food snacks to rich coconut-milk curries.
-            </p>
-          </div>
-
-          <div className="feature-card interactive-card">
-            <div className="feature-icon icon-bounce"><Icon name="journal" size={24} /></div>
-            <h3>Verified Nutritional Data</h3>
-            <p className="small muted">
-              Cross-checked with USDA FoodData Central and Open Food Facts package records. Accurate macros without wild guessing.
-            </p>
-          </div>
-
-          <div className="feature-card interactive-card">
-            <div className="feature-icon icon-bounce"><Icon name="settings" size={24} /></div>
-            <h3>Smart BMR & TDEE Targets</h3>
-            <p className="small muted">
-              Automatic calorie and protein target calculation powered by the clinical Mifflin-St Jeor equation, personalized to your body and goal.
-            </p>
-          </div>
-
-          <div className="feature-card interactive-card">
-            <div className="feature-icon icon-bounce"><Icon name="bookmark" size={24} /></div>
-            <h3>Repeat Meals in One Tap</h3>
-            <p className="small muted">
-              Save your frequent breakfasts and staple lunches as Usuals. Re-log them anytime with a single tap.
-            </p>
-          </div>
-
-          <div className="feature-card interactive-card">
-            <div className="feature-icon icon-bounce"><Icon name="lock" size={24} /></div>
-            <h3>Private & Cloud Synced</h3>
-            <p className="small muted">
-              Your journal is strictly protected by Supabase Row-Level Security. Sync seamlessly across your laptop and mobile phone.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="landing-section steps-section" id="how-it-works">
-        <div className="section-head-center">
-          <span className="eyebrow">Simple 3-Step Routine</span>
-          <h2>How Portion Works Every Day</h2>
-        </div>
-
-        <div className="steps-grid">
-          <div className="step-card step-interactive">
-            <div className="step-number pulse-number">1</div>
-            <h3>Describe Your Meal</h3>
-            <p className="small muted">
-              Type what you ate in natural language using standard household measures like glasses, bowls, or pieces.
-            </p>
-          </div>
-
-          <div className="step-card step-interactive">
-            <div className="step-number pulse-number">2</div>
-            <h3>Review Transparent Assumptions</h3>
-            <p className="small muted">
-              Portion displays the exact gram assumptions and verified sources. Tweak any ingredient in one click before saving.
-            </p>
-          </div>
-
-          <div className="step-card step-interactive">
-            <div className="step-number pulse-number">3</div>
-            <h3>Track Your Daily Progress</h3>
-            <p className="small muted">
-              Watch your protein, carbs, and fat progress bars update in real time toward your personalized health target.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Transparent Pricing & Early Access Plans */}
-      <section className="landing-section pricing-section" id="pricing">
-        <div className="section-head-center">
-          <span className="eyebrow">Early Adopter Plans</span>
-          <h2>Simple, Transparent Pricing</h2>
-          <p className="muted">
-            Portion is 100% free to use right now during our public beta. Early adopters get full access to all features and lock in grandfathered rates when Pro launches.
-          </p>
-        </div>
-
-        <div className="pricing-grid">
-          {/* Card 1: Public Beta */}
-          <div className="pricing-card beta-card hover-lift">
-            <div className="pricing-header">
-              <span className="pricing-badge green">Free Now</span>
-              <h3>Public Beta</h3>
-              <p className="small muted">Everything you need to effortlessly log your everyday meals.</p>
-              <div className="pricing-amount">
-                <span className="price-val">$0</span>
-                <span className="price-period">/ month (Free to use now)</span>
-              </div>
-            </div>
-
-            <ul className="pricing-features">
-              <li><Icon name="check" size={16} /> Natural language meal & drink logging</li>
-              <li><Icon name="check" size={16} /> Indonesian & regional dish intelligence</li>
-              <li><Icon name="check" size={16} /> Verified USDA & Open Food Facts data</li>
-              <li><Icon name="check" size={16} /> Mifflin-St Jeor BMR & TDEE macro targets</li>
-              <li><Icon name="check" size={16} /> Save Usual meals for 1-tap re-logging</li>
-              <li><Icon name="check" size={16} /> Private cloud sync with Supabase RLS</li>
-            </ul>
-
-            <button className="button primary cta-large shine-btn full-width" onClick={onSignUp}>
-              Start Free in Beta <Icon name="arrow" size={16} />
-            </button>
-            <span className="pricing-footnote">No credit card or payment required.</span>
-          </div>
-
-          {/* Card 2: Portion Pro (Launching Soon) */}
-          <div className="pricing-card pro-card hover-lift featured-card">
-            <div className="pro-pill-featured">Free Access During Beta</div>
-            <div className="pricing-header">
-              <span className="pricing-badge pro">Future Pro Tier</span>
-              <h3>Portion Pro</h3>
-              <p className="small muted">For serious health goals, athletes, and nutrition power users.</p>
-              <div className="pricing-amount">
-                <span className="price-val">$4.99</span>
-                <span className="price-period">/ month (~Rp 49.000/bln)</span>
-              </div>
-            </div>
-
-            <ul className="pricing-features">
-              <li><Icon name="check" size={16} /> <strong>Everything in Public Beta, plus:</strong></li>
-              <li><Icon name="check" size={16} /> Unlimited high-volume Claude meal breakdowns</li>
-              <li><Icon name="check" size={16} /> Micronutrient tracking (sodium, sugar, dietary fiber)</li>
-              <li><Icon name="check" size={16} /> PDF nutrition export for doctors & trainers</li>
-              <li><Icon name="check" size={16} /> Batch recipe & meal-prep portion calculator</li>
-              <li><Icon name="check" size={16} /> Priority response speed & early feature access</li>
-            </ul>
-
-            <button className="button secondary cta-large full-width hover-lift pro-btn" onClick={onSignUp}>
-              Join Pro Beta (100% Free Now) <Icon name="spark" size={16} />
-            </button>
-            <span className="pricing-footnote">Free during Early Access. Grandfathered rates for early adopters.</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Academic Backing & Research Section */}
-      <section className="landing-section academic-section" id="academic">
-        <div className="academic-card hover-lift">
-          <div className="academic-badge">Academic & Angel Backing</div>
-          <h3>Grounded in Applied AI Research</h3>
-          <p className="muted">
-            Portion is supported by angel investment and research guidance from{' '}
-            <strong>Dr. Maria Irmina Prasetiyowati, S.Kom., M.T.</strong>, Associate Professor in Artificial Intelligence and former Head of the Informatics Department at Universitas Multimedia Nusantara (UMN).
-          </p>
-          <div className="academic-quote">
-            “Developing intelligent AI models that accurately interpret complex, localized culinary vocabularies bridges the gap between academic machine learning and everyday health habits.”
-          </div>
-        </div>
-      </section>
-
-      {/* Final Call to Action */}
-      <section className="landing-final-cta">
-        <div className="final-cta-box shadow-pulse">
-          <h2>Ready to make nutrition tracking effortless?</h2>
-          <p>Create your free account today and start logging your meals in plain language.</p>
-          <div className="final-cta-buttons">
-            <button className="button primary cta-large white-btn shine-btn" onClick={onSignUp}>
-              Create Free Account <Icon name="arrow" size={17} />
-            </button>
-            <button className="button secondary cta-large outline-btn hover-lift" onClick={onSignIn}>
-              Sign In to Your Journal
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="landing-footer">
-        <div className="landing-footer-inner">
-          <div className="footer-brand">
-            <a className="brand" href="/">
-              <span className="brand-mark"><Icon name="plate" size={20} /></span>
-              portion<span className="brand-period">.</span>
-            </a>
-            <p className="small muted">
-              The intelligent food journal for real daily life.
-            </p>
-          </div>
-
-          <div className="footer-links">
-            <div className="footer-col">
-              <h4>Product</h4>
-              <a href="#features">Features</a>
-              <a href="#demo">Live Demo</a>
-              <a href="#how-it-works">How It Works</a>
-              <a href="#pricing">Pricing</a>
-              <button className="text-button small" onClick={onSignIn}>Sign In</button>
-            </div>
-            <div className="footer-col">
-              <h4>Organization</h4>
-              <a href="#academic">Research & Team</a>
-              <a href="mailto:contact@portion.my.id">contact@portion.my.id</a>
-              <span>Universitas Multimedia Nusantara</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="footer-bottom">
-          <p className="small muted">
-            © {new Date().getFullYear()} Portion. All rights reserved. Live on portion.my.id.
-          </p>
-          <p className="small muted">
-            Protected by Supabase Row-Level Security. Powered by verified USDA & Open Food Facts data.
-          </p>
-        </div>
-      </footer>
-
-      {/* Auth Modal Container */}
-      {authModal}
-    </div>
-  );
+      <section className="landing-container landing-section beta-section"><div><span className="eyebrow">Start with your next meal</span><h2>A little clarity,<br />one meal at a time.</h2><p>Early beta access is currently free. AI requests are limited by the shared app safeguard and provider availability. Future plans and pricing are not finalized.</p></div><div className="beta-actions"><button className="button primary" onClick={onSignUp}>Create your account <Icon name="arrow" size={18} /></button><button className="text-button" onClick={onSignIn}>Already have a journal? Sign in</button></div></section>
+    </main>
+    <footer className="landing-footer"><div className="landing-container"><div className="landing-footer-top"><div><Brand /><p>Your everyday food journal.</p></div><nav aria-label="Footer navigation"><a href="#demo">Sample demo</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Beta terms</a><a href="mailto:contact@portion.my.id">contact@portion.my.id</a></nav></div><div className="landing-footer-bottom"><span>© {new Date().getFullYear()} Portion</span><span>Estimates need review. Portion does not provide medical advice.</span></div></div></footer>
+    {authModal}
+  </div>;
 }

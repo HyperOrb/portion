@@ -345,13 +345,15 @@ test('failed API attempts consume the app safeguard and unexpected errors are sa
 
 test('automatically falls back to fallback model when primary model hits rate limit or quota', async () => {
   const calls = [];
+  const signals = [];
   const responseMeal = validMeal();
   responseMeal.items[0].nutrition = { basis: 'g', per100: { calories: 165, protein: 31, carbs: 0, fat: 3.6 } };
   const result = await parseMeal('200 g chicken', {
     apiKey: 'secret',
     model: 'gemini-3.5-flash-lite',
     fallbackModel: 'gemini-3.1-flash-lite',
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, options) => {
+      signals.push(options.signal);
       calls.push(url);
       if (url.includes('gemini-3.5-flash-lite')) {
         return new Response('quota reached', { status: 429, headers: { 'retry-after': '60' } });
@@ -360,6 +362,7 @@ test('automatically falls back to fallback model when primary model hits rate li
     },
   });
   assert.equal(calls.length, 2);
+  assert.equal(signals[0], signals[1], 'Fallback must share the primary request deadline');
   assert.ok(calls[0].includes('gemini-3.5-flash-lite'));
   assert.ok(calls[1].includes('gemini-3.1-flash-lite'));
   assert.equal(result.title, responseMeal.title);

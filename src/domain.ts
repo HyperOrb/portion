@@ -224,16 +224,17 @@ function food(value: unknown, path: string): NutritionFood {
   const source = object(data.source, `${path}.source`, ['name', 'id', 'url', 'description', 'dataType']);
   const name = string(source.name, `${path}.source.name`);
   const url = string(source.url, `${path}.source.url`, true);
+  const aiEstimate = name === 'Gemini AI estimate' || name === 'Claude AI estimate';
   if (name === 'Package label' && (url !== '' || source.dataType !== 'label')) invalid(`${path}.source`, 'must identify package-label data');
   if (source.dataType === 'label' && name !== 'Package label') invalid(`${path}.source`, 'must identify package-label data');
-  if ((source.dataType === 'ai_estimate' || name === 'Gemini AI estimate') && (name !== 'Gemini AI estimate' || source.dataType !== 'ai_estimate' || url !== '')) invalid(`${path}.source`, 'must identify an unverified AI estimate');
+  if ((source.dataType === 'ai_estimate' || aiEstimate) && (!aiEstimate || source.dataType !== 'ai_estimate' || url !== '')) invalid(`${path}.source`, 'must identify an unverified AI estimate');
   if (url) {
     try {
       if (!['https:', 'http:'].includes(new URL(url).protocol)) invalid(`${path}.source.url`, 'must be an HTTP or HTTPS link');
     } catch {
       invalid(`${path}.source.url`, 'must be an HTTP or HTTPS link');
     }
-  } else if (name !== 'Package label' && name !== 'Gemini AI estimate') {
+  } else if (name !== 'Package label' && !aiEstimate) {
     invalid(`${path}.source.url`, 'must identify the nutrition source');
   }
   if (Object.hasOwn(data, 'per100g') === Object.hasOwn(data, 'per100ml')) invalid(path, 'must use exactly one nutrition basis');

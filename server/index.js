@@ -4,7 +4,8 @@ import { readFile, stat } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ApiError, GEMINI_MODEL, parseMeal } from './gemini.js';
+import { ApiError } from './gemini.js';
+import { parserConfiguration } from './parser.js';
 import { searchFoods, getFood } from './nutrition.js';
 import { cloudRequired, createCloud, requireUser, reserveParse, releaseParse } from './cloud.js';
 
@@ -41,7 +42,7 @@ function assertOrigin(req, env) {
   try { origin = new URL(req.headers.origin); } catch { throw new ApiError(403, 'INVALID_ORIGIN', 'Open the app directly to make this request.'); }
   const direct = origin.origin === requestOrigin.origin;
   const configured = origin.origin === configuredOrigin;
-  const configuredWww = configuredOrigin ? (origin.hostname === `www.${configuredHost}` || configuredHost === `www.${origin.hostname}`) : false;
+  const configuredWww = configuredOrigin ? (origin.protocol === new URL(configuredOrigin).protocol && origin.port === new URL(configuredOrigin).port && (origin.hostname === `www.${configuredHost}` || configuredHost === `www.${origin.hostname}`)) : false;
   const dev = env.NODE_ENV !== 'production' && origin.protocol === 'http:' && origin.hostname === requestOrigin.hostname && ['5173', '4173'].includes(origin.port);
   if (!direct && !configured && !configuredWww && !dev) throw new ApiError(403, 'CROSS_SITE_REQUEST', 'Requests must come from this app’s origin.');
 }
@@ -114,10 +115,10 @@ async function serveFile(req, res, pathname, distPath) {
   res.end(req.method === 'HEAD' ? undefined : contents);
 }
 
-export function createRequestHandler({ env = process.env, parse = parseMeal, search = searchFoods, food = getFood, now = Date.now, distPath = DEFAULT_DIST, cloud = createCloud(env), apiOnly = false } = {}) {
+export function createRequestHandler({ env = process.env, parse, search = searchFoods, food = getFood, now = Date.now, distPath = DEFAULT_DIST, cloud = createCloud(env), apiOnly = false } = {}) {
   const authRequired = cloudRequired(env);
-  const dailyLimit = boundedNumber(env.GEMINI_DAILY_LIMIT, 20, 1000);
-  const minIntervalMs = boundedNumber(env.GEMINI_MIN_INTERVAL_SECONDS, 3, 3600) * 1000;
+  const dailyLimit = boundedNumber(env.AI_DAILY_LIMIT?.trim() || env.GEMINI_DAILY_LIMIT, 20, 1000);
+  const minIntervalMs = boundedNumber(env.AI_MIN_INTERVAL_SECONDS?.trim() || env.GEMINI_MIN_INTERVAL_SECONDS, 3, 3600) * 1000;
   let usageDay = '';
   let usageCount = 0;
   let lastAttempt = -Infinity;
@@ -135,14 +136,19 @@ export function createRequestHandler({ env = process.env, parse = parseMeal, sea
         assertOrigin(req, env);
         if (pathname === '/api/config' && req.method === 'GET') {
           resetDay();
-          const model = env.GEMINI_MODEL?.trim() || GEMINI_MODEL;
-          return json(res, 200, { geminiConfigured: Boolean(env.GEMINI_API_KEY?.trim()), model, dailyLimit, remainingToday: authRequired ? null : Math.max(0, dailyLimit - usageCount), authRequired, cloudConfigured: Boolean(cloud), nutritionMode: env.USDA_API_KEY?.trim() ? 'personal-key' : 'shared-demo-key' });
+          const parser = parserConfiguration(env);
+          const model = parser.model;
+          return json(res, 200, { aiProvider: parser.provider, aiConfigured: parser.configured, geminiConfigured: Boolean(env.GEMINI_API_KEY?.trim()), model, dailyLimit, remainingToday: authRequired ? null : Math.max(0, dailyLimit - usageCount), authRequired, cloudConfigured: Boolean(cloud), nutritionMode: env.USDA_API_KEY?.trim() ? 'personal-key' : 'shared-demo-key' });
         }
         if (authRequired) await requireUser(req, cloud);
         if (pathname === '/api/parse' && req.method === 'POST') {
           const body = await readJson(req);
           if (typeof body.description !== 'string' || body.description.trim().length < 3 || body.description.length > 4000) throw new ApiError(400, 'INVALID_DESCRIPTION', 'Describe one meal using 3 to 4,000 characters. Include amounts when you know them.');
-          if (!env.GEMINI_API_KEY?.trim()) throw new ApiError(503, 'GEMINI_NOT_CONFIGURED', 'Set GEMINI_API_KEY in the server .env file using a Free Tier Google AI Studio project, then restart. Never paste your key into this app or chat.');
+          const parser = parserConfiguration(env);
+          if (!parser.configured) {
+            if (parser.provider === 'claude') throw new ApiError(503, parser.options.enabled ? 'CLAUDE_NOT_CONFIGURED' : 'CLAUDE_DISABLED', 'Claude evaluation needs explicit server-owner enablement, a server-only key, and a supported model. Manual entry remains available.');
+            throw new ApiError(503, 'GEMINI_NOT_CONFIGURED', 'Set GEMINI_API_KEY in the server .env file using a Free Tier Google AI Studio project, then restart. Never paste your key into this app or chat.');
+          }
           const lease = randomUUID();
           if (authRequired) await reserveParse(cloud, dailyLimit, minIntervalMs / 1000, lease);
           else {
@@ -153,7 +159,7 @@ export function createRequestHandler({ env = process.env, parse = parseMeal, sea
             // ponytail: device-only development uses one process; hosted requests always use the durable SQL budget.
             usageCount += 1; lastAttempt = now(); inFlight = true;
           }
-          try { return json(res, 200, await parse(body.description.trim(), { apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL?.trim() || GEMINI_MODEL })); }
+          try { return json(res, 200, await (parse || parser.parse)(body.description.trim(), parser.options)); }
           finally { if (authRequired) await releaseParse(cloud, lease); else inFlight = false; }
         }
         if (pathname === '/api/foods/search' && req.method === 'POST') {

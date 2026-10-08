@@ -83,7 +83,7 @@ export default function OnboardingModal({
   return (
     <Modal title="Profil Tubuh & Target Harian" onClose={onClose}>
       <p className="muted small">
-        Bantu kami menghitung kebutuhan kalori dan makronutrisi harianmu secara ilmiah menggunakan rumus Mifflin-St Jeor.
+        Target ini perkiraan dari rumus Mifflin-St Jeor dan pilihan aktivitasmu. Kamu bisa mengeditnya di Settings; kebutuhan pribadi bisa berbeda.
       </p>
 
       <form onSubmit={handleSubmit} className="onboarding-form">
@@ -218,7 +218,7 @@ export default function OnboardingModal({
         <div className="calc-preview-card">
           <div className="calc-header">
             <div>
-              <span className="eyebrow">Rekomendasi Target Harian</span>
+              <span className="eyebrow">Perkiraan Target Harian</span>
               <h3 className="calc-calories">{number(targets.calories)} <span>kcal / hari</span></h3>
             </div>
             <div className="calc-stats">

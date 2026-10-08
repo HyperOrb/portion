@@ -17,7 +17,7 @@ On the current localhost app, go to **Settings → Export backup**. Keep that JS
 ## 2. Create the Supabase project
 
 1. Sign in or create an account at [Supabase](https://supabase.com/dashboard). Create an organization on the **Free** plan and a new project called Portion. Pick a nearby available region. Choose a database password in the dashboard; Portion does not need that password. Do not upgrade the plan or add paid services.
-2. Open the project’s **SQL Editor**. Paste and run [202610020001_portion.sql](../supabase/migrations/202610020001_portion.sql) once. It creates the journal table, owner-only row policies, automatic revision checks, and the private Gemini usage budget. The migration is transactional; rerunning after a successful run is unnecessary.
+2. Open the project’s **SQL Editor**. Paste and run [202610020001_portion.sql](../supabase/migrations/202610020001_portion.sql) once. It creates the journal table, owner-only row policies, automatic revision checks, and the private AI usage budget. The migration is transactional; rerunning after a successful run is unnecessary.
 3. In the project’s **Connect** dialog, find its HTTPS project URL and **publishable** key (`sb_publishable_…`). Under **Settings → API Keys**, find or create a **secret** key (`sb_secret_…`). These keys must all belong to the same project. Copy them directly into your local `.env` and Vercel settings, never into chat or a committed file.
 
 | Variable | Value | Browser exposure |
@@ -27,13 +27,13 @@ On the current localhost app, go to **Settings → Export backup**. Keep that JS
 | `SUPABASE_URL` | Same project URL | Server configuration |
 | `SUPABASE_SECRET_KEY` | `sb_secret_…` key | **Server only**, bypasses row security |
 | `GEMINI_API_KEY` | Existing AI Studio key from a project without active billing | **Server only** |
-| `GEMINI_MODEL` | `gemini-2.5-flash-lite` (your working choice) | Model name only |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` (current code default; verify access) | Model name only |
 | `GEMINI_DAILY_LIMIT` | `20` | Shared maximum attempts per UTC day |
 | `GEMINI_MIN_INTERVAL_SECONDS` | `3` | Minimum spacing between attempts |
 | `USDA_API_KEY` | Optional free FoodData Central key | **Server only** |
 | `APP_ORIGIN` | Your exact production origin, such as `https://your-portion.vercel.app` | Public address |
 
-Never prefix a Gemini, USDA, or Supabase **secret** key with `VITE_`. Vite includes `VITE_` values in the browser bundle. The build rejects browser-prefixed secrets and accepts only a publishable key in `VITE_SUPABASE_PUBLISHABLE_KEY`. The server has its own client for token verification and budget RPCs; browser journal writes use the publishable key and signed-in user session.
+Never prefix an Anthropic, Gemini, USDA, or Supabase **secret** key with `VITE_`. Vite includes `VITE_` values in the browser bundle. The build rejects browser-prefixed secrets and accepts only a publishable key in `VITE_SUPABASE_PUBLISHABLE_KEY`. The server has its own client for token verification and budget RPCs; browser journal writes use the publishable key and signed-in user session.
 
 ## 3. Enable your personal sign-in
 
@@ -108,3 +108,12 @@ Current official free-plan terms, checked October 2, 2026:
 - [Google pricing](https://ai.google.dev/gemini-api/docs/pricing) lists a Standard free tier for the configured Gemini 2.5 Flash-Lite. [Google terms](https://ai.google.dev/gemini-api/terms) explain unpaid-service data use and regional restrictions.
 
 For a new installation, complete the account setup steps above before checking its live deployment. This personal deployment's completed checks are recorded in [verification](verification.md).
+
+## Public beta readiness
+
+- Set the production origin consistently to `https://portion.my.id` and verify both the apex and any www redirect.
+- Configure Supabase custom SMTP and authorize the production confirmation/reset redirect. Supabase's default email service can restrict recipients to project-team addresses; verify signup with an external address before advertising open registration.
+- Build prerenders the public product page. `/privacy.html` and `/terms.html` are public static files. The account service can fail without hiding the landing page or sample walkthrough.
+- Confirm `contact@portion.my.id` actually receives mail.
+- Keep `AI_PROVIDER=gemini` and `CLAUDE_EVALUATION_ENABLED=false` unless the owner explicitly approves Claude evaluation costs and privacy terms. Never add `ANTHROPIC_API_KEY` with a `VITE_` prefix. See [evaluation instructions](claude-evaluation.md).
+- Gemini fallback defaults to `gemini-3.1-flash-lite`; set `GEMINI_FALLBACK_MODEL` to a model available to your own project. This is a same-provider fallback, not an automatic switch to Claude.

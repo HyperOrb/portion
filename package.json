@@ -10,7 +10,7 @@
     "dev": "node scripts/dev.js",
     "dev:client": "vite --host 0.0.0.0",
     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && tsx scripts/prerender.ts",
     "start": "node --env-file-if-exists=.env server/index.js",
     "test": "tsx --test tests/*.test.*"
   },

@@ -31,8 +31,8 @@ export async function requireUser(req, cloud) {
 export async function reserveParse(cloud, dailyLimit, intervalSeconds, lease) {
   let result;
   try { result = await cloud.rpc('reserve_parse', { p_daily_limit: dailyLimit, p_interval_seconds: intervalSeconds, p_lease: lease }); }
-  catch { throw new ApiError(503, 'BUDGET_UNAVAILABLE', 'The usage safeguard is unavailable. No Gemini request was sent. Check the Supabase setup and try again.'); }
-  if (result.error || typeof result.data?.allowed !== 'boolean') throw new ApiError(503, 'BUDGET_UNAVAILABLE', 'The usage safeguard is unavailable. Run the database migration before using Gemini.');
+  catch { throw new ApiError(503, 'BUDGET_UNAVAILABLE', 'The usage safeguard is unavailable. No AI request was sent. Check the Supabase setup and try again.'); }
+  if (result.error || typeof result.data?.allowed !== 'boolean') throw new ApiError(503, 'BUDGET_UNAVAILABLE', 'The usage safeguard is unavailable. Run the database migration before using AI.');
   if (!result.data.allowed) {
     if (result.data.reason === 'daily') throw new ApiError(429, 'DAILY_SAFEGUARD', `The app’s shared ${dailyLimit}-request daily safeguard has been reached. It resets at midnight UTC. You can still log usual meals or enter foods manually.`);
     throw new ApiError(429, 'REQUEST_PACING', 'Please wait a moment before estimating another meal.', Math.max(1, Math.min(3600, Number(result.data.retryAfterSeconds) || 3)));
