@@ -2,6 +2,13 @@
 
 October 1–2, 2026.
 
+## Gemini parsing rejection — October 9, 2026
+
+- Live Google `generateContent` reproduced HTTP 400 `INVALID_ARGUMENT` for the simple input `1 banana`. With the same model, key, prompt, and thinking setting, removing only the root meal-item array's `maxItems: 20` made parsing succeed. The preceding token-count check returned 200 and did not catch this generation-time schema rejection.
+- Removed that decoder constraint and described the 20-item limit in the schema instead. Server response validation still rejects more than 20 items; regression coverage checks both the outgoing schema and rejection of a 21-item response.
+- After the fix, live Gemini parsing of the reported roti abon / three bananas / unsweetened latte example returned three distinct items. The latte retained 240 mL, null grams, and per-100-mL values. All nutrition remained explicitly labelled AI estimates. The user confirmed Free Tier before live parsing tests; no meals were saved or production secrets changed.
+- `npm test`: **54 passing**. `npm run build` and `git diff --check` passed. Live parsing used the local server credential; production account parsing still requires a separate confirmation after deployment.
+
 ## Startup readiness improvements — October 8, 2026
 
 - `npm test`: **53 passing**, up from the 46-test baseline. Coverage includes existing calculations, package labels, backup validation, actual PostgreSQL owner-isolation/revision/budget behavior, server authentication, provider errors, and the Vite proxy path. Added Claude enablement/transport/provenance/auth/budget checks, matching www origin protocol/port, sample scaling, and a Claude estimate backup round-trip. The latter failed before the validator was updated to recognize Claude while still rejecting forged source labels and links.

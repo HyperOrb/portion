@@ -256,6 +256,9 @@ test('Gemini REST transport pins the model, honest estimation schema, and LOW th
     const body = JSON.parse(options.body);
     assert.equal(body.generationConfig.responseMimeType, 'application/json');
     assert.deepEqual(body.generationConfig.responseJsonSchema, mealSchema);
+    // A root item maxItems bound makes Google reject this nested schema with HTTP 400.
+    assert.equal(body.generationConfig.responseJsonSchema.properties.items.maxItems, undefined);
+    assert.throws(() => validateMeal({ ...validMeal(), items: Array.from({ length: 21 }, () => validMeal().items[0]) }), { code: 'INVALID_AI_RESPONSE' });
     assert.equal(mealSchema.additionalProperties, false);
     assert.equal(mealSchema.properties.items.items.additionalProperties, false);
     assert.equal(body.generationConfig.responseFormat, undefined);

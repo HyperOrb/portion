@@ -51,7 +51,8 @@ export const mealSchema = {
     title: string,
     items: {
       type: 'array',
-      maxItems: 20,
+      // A maxItems bound here makes Google reject this nested schema; validateMeal enforces the limit.
+      description: 'At most 20 food or drink items.',
       items: { type: 'object', additionalProperties: false, properties: itemProperties, required: Object.keys(itemProperties) },
     },
     checks: strings,
