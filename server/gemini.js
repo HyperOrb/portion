@@ -171,8 +171,17 @@ export async function parseMeal(description, {
       response = await callModel(activeModel);
     }
     if (!response.ok) {
-      // Provider error bodies can echo submitted text: never forward or log them.
-      if (response.status === 400) throw new ApiError(502, 'GEMINI_REQUEST_REJECTED', 'Google rejected the parsing request or project configuration. Check the server’s Gemini setup, or enter foods manually.');
+      // Inspect only known error codes; messages/metadata can echo keys or meal text.
+      if (response.status === 400) {
+        const payload = await response.json().catch(() => null);
+        if (Array.isArray(payload?.error?.details) && payload.error.details.some(detail => detail?.reason === 'API_KEY_INVALID')) {
+          throw new ApiError(503, 'GEMINI_KEY_REJECTED', 'Google rejected the server API key. The operator needs to replace GEMINI_API_KEY in the hosting environment and redeploy. You can enter foods manually meanwhile.');
+        }
+        if (payload?.error?.status === 'FAILED_PRECONDITION') {
+          throw new ApiError(503, 'GEMINI_PROJECT_REJECTED', 'Google blocked this project’s Gemini access. The operator needs to check project eligibility and regional Free Tier access in AI Studio. This app will not enable billing automatically. You can enter foods manually meanwhile.');
+        }
+        throw new ApiError(502, 'GEMINI_REQUEST_REJECTED', 'Google rejected the parsing request or project configuration. Check the server’s Gemini setup, or enter foods manually.');
+      }
       if (response.status === 402) throw new ApiError(503, 'GEMINI_BILLING_REJECTED', 'Google returned a billing or credit error for this project. Check that the server key belongs to a Free Tier project in AI Studio. This app will not enable billing or use a paid fallback.');
       if (response.status === 429) {
         const retry = Number(response.headers.get('retry-after'));

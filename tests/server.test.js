@@ -314,6 +314,26 @@ test('profile, nutrition targets, and photos in a parse request never enter Gemi
   assert.equal(calls, 1);
 });
 
+test('Google HTTP 400 distinguishes invalid keys and project prerequisites without exposing upstream details', async t => {
+  for (const [providerError, code, status] of [
+    [{ status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] }, 'GEMINI_KEY_REJECTED', 503],
+    [{ status: 'FAILED_PRECONDITION' }, 'GEMINI_PROJECT_REJECTED', 503],
+    [{ status: 'INVALID_ARGUMENT' }, 'GEMINI_REQUEST_REJECTED', 502],
+  ]) {
+    const { request } = await app(t, {
+      env: { GEMINI_API_KEY: 'server-only-secret', GEMINI_MIN_INTERVAL_SECONDS: '0' },
+      parse: (text, options) => parseMeal(text, { ...options, fetchImpl: async () => new Response(JSON.stringify({
+        error: { ...providerError, message: 'private description and server-only-secret', details: [...(providerError.details || []), { message: 'private description and server-only-secret', metadata: { key: 'server-only-secret' } }] },
+      }), { status: 400 }) }),
+    });
+    const response = await request('/api/parse', { description: 'private description' });
+    const body = await response.json();
+    assert.equal(body.code, code);
+    assert.equal(response.status, status);
+    assert.doesNotMatch(JSON.stringify(body), /private description|server-only-secret|metadata/);
+  }
+});
+
 test('Gemini request failures, free-tier access, rate limits and overload stay distinct and private', async () => {
   for (const [status, code] of [[400, 'GEMINI_REQUEST_REJECTED'], [402, 'GEMINI_BILLING_REJECTED'], [429, 'GEMINI_QUOTA'], [403, 'GEMINI_KEY_REJECTED'], [404, 'GEMINI_MODEL_UNAVAILABLE'], [500, 'GEMINI_UNAVAILABLE'], [503, 'GEMINI_BUSY']]) {
     await assert.rejects(parseMeal('private description', { apiKey: 'secret', fetchImpl: async () => new Response('private description and secret', { status, headers: { 'retry-after': '17' } }) }), (error) => {
@@ -368,4 +388,3 @@ test('automatically falls back to fallback model when primary model hits rate li
   assert.equal(result.title, responseMeal.title);
   assert.equal(result.items[0].food.source.id, 'gemini-3.1-flash-lite');
 });
-
